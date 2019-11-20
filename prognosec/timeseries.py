@@ -6,6 +6,38 @@ ONEBDAY = pandas.tseries.offsets.BusinessDay(1)
 
 
 class Timeseries:
+    """Time series dataset
+
+    `Timeseries` wraps a `pandas.DataFrame` object that houses the actual
+    time series data. It is primarily designed to simplify common analysis
+    requirements of time series data through methods, as well as standardizing
+    input/output functionalities.
+
+    Datetime frequency is strictly enforced through the requirement of the
+    presence of a `pandas.DatetimeIndex`. This requirement should help with
+    methods that can group by time for differing period sizes.
+
+    Attributes
+    ----------
+    X
+    primary_series
+    periods
+    index_name
+    series
+    frequency
+    timezone
+
+    Parameters
+    ----------
+    X : pandas.DataFrame
+        A data frame that houses the time series data. Must have an index that
+        is `DatetimeIndex` and must have its frequency set.
+    primary_series : str, optional
+        The name of the primary series. Many time series can have multiple
+        series. This enables quicker selection of the series for plotting
+        and modeling.
+    """
+
     def __init__(self, X, primary_series=None):
         if isinstance(X, pandas.DataFrame) is not True:
             raise TypeError("`X` needs to be a `pandas.DataFrame`")
@@ -16,10 +48,12 @@ class Timeseries:
 
     @property
     def X(self):
+        """pandas.DataFrame : Internal object housing the time series data"""
         return self._X
 
     @property
     def primary_series(self):
+        """str : Name of the primary time series"""
         return self._primary_series
 
     @primary_series.setter
@@ -29,18 +63,22 @@ class Timeseries:
 
     @property
     def periods(self):
+        """pandas.DatetimeIndex : The date time index of the time series"""
         return self._X.index if self._X is not None else None
 
     @property
     def index_name(self):
+        """str : Index name of the object's `pandas.DatetimeIndex`"""
         return self._X.index.name
 
     @property
     def series(self):
+        """list(str) : Names of all time series"""
         return self._X.columns.to_numpy() if self._X is not None else None
 
     @property
     def frequency(self):
+        """pandas.tseries.offsets.BusinessDay : Frequency of the time series"""
         return self._X.index.freq if self._X is not None else None
 
     @frequency.setter
@@ -49,6 +87,7 @@ class Timeseries:
 
     @property
     def timezone(self):
+        """str : The timezone of the time series"""
         return self._X.index.tz
 
     @timezone.setter
@@ -59,9 +98,30 @@ class Timeseries:
             self._X.index = self._X.index.tz_convert(tz)
 
     def has_series(self, name):
+        """Determines whether the `Timeseries` has the series name
+
+        Parameters
+        ----------
+        name : str
+            The name of the series to check for
+
+        Returns
+        -------
+        bool
+            If `True`, then `Timeseries` has the series name, otherwise `False`
+        """
+
         return name in self.series
 
     def plot(self, series=None):
+        """Plot time series with a `Plotly` line chart
+
+        Parameters
+        ----------
+        series : str, optional
+            Specifies which time series to plot. If `None`, then the object's
+            defined `Timeseries.primary_series` is used
+        """
         if series is None and self._primary_series is None:
             raise ValueError("Must provide a value for 'series' "
                              "if 'primary_series' property is not set")

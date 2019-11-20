@@ -1,6 +1,6 @@
 import pandas
 import numpy
-import timeseries
+import prognosec.timeseries as timeseries
 
 
 ONEBDAY = pandas.tseries.offsets.BusinessDay(1)
