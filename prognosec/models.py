@@ -1,46 +1,82 @@
 import pandas
 import numpy
 import prognosec.timeseries as timeseries
+from statsmodels.tsa.arima_model import ARIMA
 
 
 ONEBDAY = pandas.tseries.offsets.BusinessDay(1)
 
 
 class RandomWalk:
-    def __init__(self, X=None):
-        if X is not None:
-            if isinstance(X, timeseries.Timeseries) is not True:
-                raise TypeError("`X` needs to be a `Timeseries` object")
+    def __init__(self, tsobj=None):
+        if tsobj is not None:
+            if isinstance(tsobj, timeseries.Timeseries) is not True:
+                raise TypeError("`tsobj` needs to be a `Timeseries` object")
 
-            self._X = X
-            self.fit(X)
+            self._ts = tsobj
+            self.fit(tsobj)
         else:
-            self._X = None
-            self._fdmean = None
-            self._fdstd = None
+            self._params = dict()  # key by series
+            self._models = dict()  # key by series, store model as value
+            self._ts = None
 
-    def fit(self, X=None):
-        if self._X is None and X is None:
+    @property
+    def params(self):
+        return self._params
+
+    @params.setter
+    def params(self, params):
+        if isinstance(params, dict) is not True:
+            raise TypeError("'params' must be of type dict")
+        if len(params) != len(self._params):
+            raise ValueError(f"len(params) does is not {len(self._params)}")
+        if len(set([len(i) for i in params.values()])) is not True:
+            raise ValueError("All series in 'params' is not correct")
+
+        self._params = params
+
+    @property
+    def param_names(self):
+        return tuple(self._params.keys())
+
+    def fit(self, tsobj=None, append=False):
+        if self._ts is None and tsobj is None:
             raise ValueError("`X` is not set")
 
-        if X is not None:
-            self._X = X
+        if tsobj is not None:
+            if append is False:
+                self._ts = tsobj
+            else:
+                self._ts.append(tsobj)
 
-        self._fdmean = self._X.X.diff(1).apply(lambda x: x.mean()).to_dict()
-        self._fdstd = self._X.X.diff(1).apply(lambda x: x.std()).to_dict()
+        for a_series in self._ts.series:
+            mod = ARIMA(self._ts.X[[a_series]], (0, 1, 0))
+            self._params[a_series] = (0, 1, 0)
+            self._models[a_series] = mod.fit()
 
     def forecast(self, nperiods, series):
-        xs = self._X.X[series].last('1' + self._X.X.index.freqstr)
+        q_nperiods = nperiods
+        while True:
+            new_dti = self._ts.periods.shift(q_nperiods)[-q_nperiods:]
+            new_dti = self._ts._calendar.valid_days(new_dti[0], new_dti[-1],
+                                                    tz=self._ts.timezone)
 
-        pred_series = numpy.random.normal(loc=0, scale=self._fdstd[series],
-                                          size=nperiods)
+            if len(new_dti) != nperiods:
+                q_nperiods += 1
+            else:
+                break
 
-        pred_series[0] = xs[0]
-        pred_series = pred_series.cumsum()
+        results = self._models[series].forecast(nperiods)
+        result = {
+            series: results[0],
+            'se': results[1],
+            'lower': [i[0] for i in results[2]],
+            'upper': [i[1] for i in results[2]]
+        }
+        result = pandas.DataFrame.from_dict(result)
+        result.index = new_dti
+        result.index.name = self._ts.periods.name
 
-        result = pandas.DataFrame.from_dict({series: pred_series})
-        result.index = pandas.bdate_range(xs.index[0] + ONEBDAY,
-                                          periods=nperiods,
-                                          name=self._X.X.index.name)
-
-        return timeseries.Timeseries(result, series)
+        return timeseries.TimeseriesForecast(result, series,
+                                             self._ts._calendar,
+                                             self._ts._na_strategy)
