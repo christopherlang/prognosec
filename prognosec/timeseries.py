@@ -1,6 +1,7 @@
 import pandas
 import plotly.express as px
 import pandas_market_calendars as mcal
+import sklearn.model_selection
 
 
 ONEBDAY = pandas.tseries.offsets.BusinessDay(1)
@@ -42,7 +43,7 @@ class Timeseries:
     """
 
     def __init__(self, X, primary_series=None, calendar=None,
-                 na_strategy='ffill'):
+                 na_strategy='ffill', enable_transforms=False):
         if isinstance(X, pandas.DataFrame) is not True:
             raise TypeError("`X` needs to be a `pandas.DataFrame`")
 
@@ -60,10 +61,40 @@ class Timeseries:
         self._primary_series = primary_series
         self._na_strategy = na_strategy
 
+        self._enable_transforms = enable_transforms
+        self._transformations = Transformations(self.series)
+
+    @property
+    def transformations(self):
+        return self._transformations
+
+    @property
+    def enable_transforms(self):
+        return self._enable_transforms
+
+    @enable_transforms.setter
+    def enable_transforms(self, should_enable):
+        self._enable_transforms = should_enable
+
     @property
     def X(self):
         """pandas.DataFrame : Internal object housing the time series data"""
-        return self._X
+        output = self._X
+        if self.enable_transforms is True:
+            for a_series in self.series:
+                output[a_series] = self.transformations.apply(a_series,
+                                                              output[a_series])
+
+            output = self._execute_na_strategy(output, self._na_strategy)
+
+        return output
+
+    @X.setter
+    def X(self, df):
+        if isinstance(df, pandas.DataFrame) is not True:
+            raise TypeError("Value must be a 'pandas.DataFrame'")
+
+        self._X = df
 
     @property
     def primary_series(self):
@@ -83,7 +114,7 @@ class Timeseries:
     @property
     def index_name(self):
         """str : Index name of the object's `pandas.DatetimeIndex`"""
-        return self._X.index.name
+        return self.X.index.name
 
     @property
     def series(self):
@@ -172,7 +203,7 @@ class Timeseries:
             raise ValueError("'name' cannot be None if primary series is None")
         series_name = name if name is not None else self._primary_series
 
-        return self._X[series_name]
+        return self.X[series_name]
 
     def plot(self, series=None, bounds=None):
         """Plot time series with a `Plotly` line chart
@@ -189,8 +220,17 @@ class Timeseries:
         if series is None:
             series = self._primary_series
 
-        plot = px.line(self._X.reset_index(), x=self.index_name, y=series)
+        plot = px.line(self.X.reset_index(), x=self.index_name, y=series)
         plot.show()
+
+    def slice(self, indices, positional=False):
+        if positional is True:
+            output = self._X.iloc[indices, :]
+        else:
+            output = self._X.loc[indices, :]
+
+        return Timeseries(output, self._primary_series, self._calendar,
+                          self._na_strategy, self._enable_transforms)
 
     def _verify(self, X, primary_series):
         X_freq = X.index.freq
@@ -209,13 +249,22 @@ class Timeseries:
 
     def __repr__(self):
         output = list()
-        output.append(f"# of records: {len(self._X)}, "
-                      f"of series: {len(self._X.columns)}")
+        output.append(f"# of records: {len(self.X)}, "
+                      f"of series: {len(self.X.columns)}")
         output.append(f"Frequency: {self.frequency}")
-        output.append(f"Date min: {self._X.index.min()}, "
-                      f"max: {self._X.index.max()}")
+        output.append(f"Date min: {self.X.index.min()}, "
+                      f"max: {self.X.index.max()}")
 
         return "\n".join(output)
+
+    def split(self, series=None, n=10):
+        series = self._primary_series if series is None else series
+
+        series_splitter = sklearn.model_selection.TimeSeriesSplit(n_splits=n)
+        ts_splitter = series_splitter.split(self.get_series_pandas(series))
+
+        for train_ds, test_ds in ts_splitter:
+            yield [self.slice(train_ds, True), self.slice(test_ds, True)]
 
 
 class TimeseriesForecast(Timeseries):
@@ -227,7 +276,70 @@ class TimeseriesForecast(Timeseries):
         """Plot time series with a `Plotly` line chart"""
 
         r = self._X.reset_index().drop('se', 1)
-        r = r.melt('date', var_name='series')
+        r = r.melt(self.index_name, var_name='series')
 
         plot = px.line(r, x=self.index_name, y='value', color='series')
         plot.show()
+
+
+class TimeseriesFitted(Timeseries):
+    def __init__(self, X, primary_series=None, calendar=None,
+                 na_strategy='ffill'):
+        super().__init__(X, primary_series, calendar, na_strategy)
+
+    def plot(self):
+        """Plot time series with a `Plotly` line chart"""
+        r = self._X.reset_index().melt(self.index_name, var_name='series')
+
+        plot = px.line(r, x=self.index_name, y='value', color='series')
+        plot.show()
+
+
+class Transformations:
+    def __init__(self, series_names):
+        self._transforms = {series: list() for series in series_names}
+
+    def add(self, series, fun):
+        if isinstance(series, str):
+            self._transforms[series].append(fun)
+
+        if isinstance(series, list):
+            for a_series in series:
+                self._transforms[a_series].append(fun)
+
+    def drop(self, series, index):
+        if isinstance(series, str):
+            self._transforms[series].pop(index)
+
+        if isinstance(series, list):
+            for a_series in series:
+                self._transforms[a_series].pop(index)
+
+    def drop_last(self, series):
+        self.drop(series, -1)
+
+    def drop_first(self, series):
+        self.drop(series, 0)
+
+    def replace(self, series, index, fun):
+        if isinstance(series, str):
+            self._transforms[series][index] = fun
+
+        if isinstance(series, list):
+            for a_series in series:
+                self._transforms[a_series][index] = fun
+
+    def insert(self, series, index, fun):
+        if isinstance(series, str):
+            self._transforms[series].insert(index, fun)
+
+        if isinstance(series, list):
+            for a_series in series:
+                self._transforms[a_series].insert(index, fun)
+
+    def apply(self, series_name, series_data):
+        result = series_data
+        for a_fun in self._transforms[series_name]:
+            result = a_fun(result)
+
+        return result
