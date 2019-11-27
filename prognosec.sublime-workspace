@@ -135,6 +135,24 @@
 	},
 	"buffers":
 	[
+		{
+			"file": "tests/test_timeseries.py",
+			"settings":
+			{
+				"buffer_size": 309,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "prognosec.sublime-project",
+			"settings":
+			{
+				"buffer_size": 755,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		}
 	],
 	"build_system": "",
 	"build_system_choices":
@@ -147,6 +165,18 @@
 		"last_filter": "",
 		"selected_items":
 		[
+			[
+				"repl python run",
+				"SublimeREPL: Python - RUN current file"
+			],
+			[
+				"enable",
+				"Package Control: Enable Package"
+			],
+			[
+				"set pyth",
+				"Set Syntax: MagicPython"
+			],
 			[
 				"mag",
 				"Set Syntax: MagicPython"
@@ -234,13 +264,14 @@
 	"expanded_folders":
 	[
 		"/home/chlang/Projects/prognosec",
-		"/home/chlang/Projects/prognosec/data",
-		"/home/chlang/Projects/prognosec/data/USCPIAI",
-		"/home/chlang/Projects/prognosec/data/USGDP",
-		"/home/chlang/Projects/prognosec/prognosec"
+		"/home/chlang/Projects/prognosec/prognosec",
+		"/home/chlang/Projects/prognosec/tests"
 	],
 	"file_history":
 	[
+		"/home/chlang/.config/sublime-text-3/Packages/User/SublimeREPL.sublime-settings",
+		"/home/chlang/Projects/prognosec/prognosec.sublime-project",
+		"/home/chlang/.config/sublime-text-3/Packages/SublimeREPL/SublimeREPL.sublime-settings",
 		"/home/chlang/Projects/prognosec/.gitignore",
 		"/home/chlang/Projects/prognosec/prognosec/timeseries.py",
 		"/home/chlang/Projects/prognosec/prognosec/models.py",
@@ -249,8 +280,6 @@
 		"/home/chlang/Projects/prognosec/data/USCPIAI/USCPIAI.md",
 		"/home/chlang/Projects/prognosec/data/USGDP/field_info.csv",
 		"/home/chlang/Projects/prognosec/data/USCPIAI/field_info.csv",
-		"/home/chlang/.config/sublime-text-3/Packages/User/SublimeREPL.sublime-settings",
-		"/home/chlang/.config/sublime-text-3/Packages/SublimeREPL/SublimeREPL.sublime-settings",
 		"/home/chlang/Desktop/key.txt",
 		"/home/chlang/Projects/knowsec/knowsec/prognosec.sublime-project",
 		"/home/chlang/Projects/knowsec/knowsec/database.py",
@@ -326,8 +355,76 @@
 	"groups":
 	[
 		{
+			"selected": 0,
 			"sheets":
 			[
+				{
+					"buffer": 0,
+					"file": "tests/test_timeseries.py",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 309,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								33,
+								33
+							]
+						],
+						"settings":
+						{
+							"SL.14.region_keys":
+							[
+							],
+							"SL.28.region_keys":
+							[
+							],
+							"syntax": "Packages/MagicPython/grammars/MagicPython.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "prognosec.sublime-project",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 755,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								732,
+								732
+							]
+						],
+						"settings":
+						{
+							"SL.26.region_keys":
+							[
+								"sublime_linter.protected_regions"
+							],
+							"syntax": "Packages/JavaScript/JSON.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"type": "text"
+				}
 			]
 		},
 		{
@@ -382,11 +479,15 @@
 	{
 		"height": 114.0
 	},
+	"output.exec":
+	{
+		"height": 155.0
+	},
 	"output.find_results":
 	{
 		"height": 0.0
 	},
-	"pinned_build_system": "",
+	"pinned_build_system": "prognosec build",
 	"project": "prognosec.sublime-project",
 	"replace":
 	{
@@ -420,7 +521,7 @@
 		],
 		"width": 0.0
 	},
-	"selected_group": 0,
+	"selected_group": 1,
 	"settings":
 	{
 	},
