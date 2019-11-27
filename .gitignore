@@ -3,6 +3,10 @@
 *.log
 *.tsv
 
+# Data related text files
+data/**/*.md
+data/*.md
+
 # Rstudio related files
 *Rproj
 *Rhistory
