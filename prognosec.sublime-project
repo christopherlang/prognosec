@@ -1,36 +1,48 @@
 {
-    "build_systems":
-    [
-        {
-            "name": "prognosec build",
-            // target uses the ExecuteCondaEnvironmentCommand found in
-            // commands.py
-            "target": "execute_conda_environment",
-            "cmd": ["python", "-u", "$file"],
-            "file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
-            "selector": "source.python",
-            "env":
-            {
-                "PYTHONIOENCODING": "utf-8",
-                "PYTHONPATH": "/home/chlang/Projects/prognosec/prognosec"
-            },
-            "cancel": {"kill": true},
-            "working_dir": "${project_path}/prognosec"
-        }
-    ],
-    "conda_environment": "/home/chlang/anaconda3/envs/promometheus",
-    "folders":
-    [
-        {
-            "path": "."
-        }
-    ],
-    "settings":
-    {
-        "extra_paths":
-        [
-            "/home/chlang/Projects/prognosec/prognosec"
-        ],
-        "python_interpreter": "/home/chlang/anaconda3/envs/promometheus/bin/python"
-    }
+	"build_systems":
+	[
+		{
+			"cancel":
+			{
+				"kill": true
+			},
+			"cmd":
+			[
+				"python",
+				"-u",
+				"$file"
+			],
+			"env":
+			{
+				"PYTHONIOENCODING": "utf-8",
+				"PYTHONPATH": "/home/chlang/Projects/prognosec/prognosec"
+			},
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "prognosec build",
+			"selector": "source.python",
+			"target": "execute_conda_environment",
+			"working_dir": "${project_path}/prognosec"
+		},
+		{
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Anaconda Python Builder",
+			"selector": "source.python",
+			"shell_cmd": "\"/home/chlang/anaconda3/envs/promometheus/bin/python\" -u \"$file\""
+		}
+	],
+	"conda_environment": "/home/chlang/anaconda3/envs/promometheus",
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+	"settings":
+	{
+		"extra_paths":
+		[
+			"/home/chlang/Projects/prognosec/prognosec"
+		],
+		"python_interpreter": "/home/chlang/anaconda3/envs/promometheus/bin/python"
+	}
 }

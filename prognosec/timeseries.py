@@ -587,16 +587,16 @@ class ExogSeries:
         Parameters
         -----------
         series : pandas.Series
-        na_strategy : {'backfill', 'bfill', 'pad', 'ffill', 'drop', None,
-                       function}
+        na_strategy : {'backfill', 'bfill', 'pad', 'ffill', 'drop', 'asis',
+                       None, function}
             The method used for handing `NaN` in the series. If `None`,
-            defaults to `mean`
+            defaults to `asis`
         resample_fill_strategy : {str, function, numpy ufunc, None}
             Method used for filling in the seriesafter index resampling. If
             `None`, 'ffill' is default. Please see `pands.DataFrame.apply` for
             details on this
         """
-        self._na_strategy = na_strategy if na_strategy else pandas.np.mean
+        self._na_strategy = na_strategy if na_strategy else 'asis'
 
         if resample_fill_strategy is None:
             self._resample_fill_strategy = 'ffill'
@@ -625,22 +625,22 @@ class ExogSeries:
 
     @property
     def index_type(self):
-        return self._series.index
+        return self.series.index
 
     @property
     def index(self):
-        return self._series.index
+        return self.series.index
 
     @property
     def periods(self):
-        return self._series.index
+        return self.series.index
 
     @property
     def size(self):
         return len(self.series)
 
     @property
-    def type(self):
+    def dtype(self):
         return self.series.dtype
 
     @property
@@ -666,7 +666,7 @@ class ExogSeries:
         -------
         bool
         """
-        return self._series.isnull().values.any()
+        return self.series.isnull().values.any()
 
     def is_na(self):
         """Retrieve a is NaN boolean series
@@ -675,7 +675,7 @@ class ExogSeries:
         -------
         pandas.Series of bool
         """
-        return self._series.isnull()
+        return self.series.isnull()
 
     def size_na(self):
         """Get the number of NaN in the series
@@ -684,7 +684,7 @@ class ExogSeries:
         -------
         int
         """
-        return self._series.isnull().sum()
+        return self.series.isnull().sum()
 
     def cast_series(self, dtype):
         """Cast series' data type
@@ -694,6 +694,9 @@ class ExogSeries:
         dtype : numpy.dtype
         """
         self._series = self._series.astype(dtype)
+
+    def set_value(self, index, value):
+        self._series[index] = value
 
     def resample(self, freq, method=None, inplace=False):
         """Resample, or group by, index
@@ -715,10 +718,10 @@ class ExogSeries:
             this method returns a new copy instead
         """
         method = method if method else self._resample_fill_strategy
-        result = self._series.resample(freq).apply(method)
+        result = self.series.resample(freq).apply(method)
 
         if inplace is True:
-            self._series = result
+            self.series = result
         else:
             return result
 
@@ -738,15 +741,22 @@ class ExogSeries:
         # NA cleaning
         fillna_methods = ['backfill', 'bfill', 'pad', 'ffill', None]
 
+        output = None
         if self._na_strategy is not None:
             if self._na_strategy == 'drop':
-                return series.dropna()
+                output = series.dropna()
+            elif self._na_strategy == 'asis':
+                output = series
             elif self._na_strategy in fillna_methods:
-                return series.fillna(method=self._na_strategy)
+                output = series.fillna(method=self._na_strategy)
             else:
-                return series.replace(pandas.np.nan, self._na_strategy(series))
+                output = series.replace(
+                    pandas.np.nan,
+                    self._na_strategy(series))
         else:
-            return series
+            output = series
+
+        return output
 
     def copy(self):
         return copy.deepcopy(self)

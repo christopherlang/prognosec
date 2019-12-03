@@ -3,6 +3,9 @@
 *.log
 *.tsv
 
+# sublime workspace
+*sublime-workspace
+
 # Data related text files
 data/**/*.md
 data/*.md
