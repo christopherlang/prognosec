@@ -408,10 +408,11 @@ class ExogFrame:
             else:
                 input_resample_strat = resample_strat
 
-            self._exogseries[a_col] = ExogSeries(df[a_col], input_na_strat,
-                                                 input_resample_strat)
+            an_exogseries = ExogSeries(df[a_col], input_na_strat,
+                                       input_resample_strat)
+            self._exogseries[a_col] = an_exogseries
 
-    def get_series(self, exog_name):
+    def get_series(self, exog_name, copy=False):
         """Retrieve an `ExogSeries` by name
 
         Parameters
@@ -422,7 +423,12 @@ class ExogFrame:
         -------
         ExogSeries
         """
-        return self._exogseries[exog_name]
+        output = self._exogseries[exog_name]
+
+        if copy:
+            output = output.copy()
+
+        return output
 
     def add_series(self, series, series_name, na_strat=None,
                    resample_strat=None):
@@ -441,7 +447,12 @@ class ExogFrame:
 
     def drop_series(self, exog_name):
         """Remove an ExogSeries"""
-        del self._series[exog_name]
+        self._exogseries.pop(exog_name)
+
+    def rename_series(self, old_name, new_name):
+        new_dict = ((new_name if k == old_name else k, v)
+                    for k, v in self.exogseries.items())
+        self._exogseries = collections.OrderedDict(new_dict)
 
     def set_resample_strat(self, exog_name, resample_strat):
         """Set a resampling strategy for an ExogSeries
@@ -455,6 +466,9 @@ class ExogFrame:
             Please see `pands.DataFrame.apply` for details on this.
         """
         self.get_series(exog_name).resample_fill_strategy = resample_strat
+
+    def set_na_strat(self, exog_name, na_strat):
+        self.get_series(exog_name).na_strategy = na_strat
 
     def resample(self, freq, series=None, method=None, inplace=False):
         """Resample, or group by, index for a series
@@ -470,10 +484,11 @@ class ExogFrame:
         series : {str, None}
             If the series' name is provide, only resampling is applied to that
             series. If `None`, the resampling is applied to all `ExogSeries`
-        method : {str, function, numpy ufunc, None}
-            How should the resampler handle aggregation/expansion. If `None`,
-            than the `ExogSeries` property `resample_fill_strategy` is used.
-            Please see `pands.DataFrame.apply` for details on this.
+        method : (str, func, None, dict)
+            Resampling method to be passed to `ExogSeries.resample`. If a
+            `dict` is passed, it should be keyed on series name, with the
+            appropriate method passed. If a key is missing for a series, the
+            `ExogFrame` default method will be used
         inplace : bool
             If `True`, than the method will set the `ExogSeries` data
             internally. Else, returns a copy of the `ExogFrame` with the
@@ -486,24 +501,36 @@ class ExogFrame:
             Otherwise, nothing is returned and resampling has been applied to
             the object in question
         """
-        if inplace:
-            if series is not None:
-                self.get_series(series).resample(freq, method, inplace=True)
-            else:
-                for a_exogseries in self.gen_exogseries():
-                    exogseries_data = a_exogseries['series']
-                    exogseries_data.resample(freq, method, inplace=True)
+        workframe = self if inplace else copy.deepcopy(self)
+
+        if series is not None:
+            series_seq = {'series': workframe.get_series(series),
+                          'name': series}
+            series_seq = [series_seq]
         else:
-            df = copy.deepcopy(self)
+            series_seq = workframe.gen_exogseries()
 
-            if series is not None:
-                df.get_series(series).resample(freq, method, inplace=True)
-            else:
-                for a_exogseries in df.gen_exogseries():
-                    exogseries_data = a_exogseries['series']
-                    exogseries_data.resample(freq, method, inplace=True)
+        skipped_series = list()
+        method_error_series = list()
+        for a_exogseries in series_seq:
+            exogseries_data = a_exogseries['series']
 
-            return df
+            try:
+                if isinstance(method, dict):
+                    try:
+                        series_method = method[a_exogseries['name']]
+                    except KeyError:
+                        series_method = None
+                else:
+                    series_method = method
+
+                exogseries_data.resample(freq, series_method, inplace=True)
+            except pandas.core.base.DataError:
+                skipped_series.append(a_exogseries['name'])
+                method_error_series.append(a_exogseries['name'])
+
+        if inplace is not True:
+            return workframe
 
     def copy(self):
         return copy.deepcopy(self)
@@ -552,7 +579,8 @@ class ExogFrame:
 
 
 class ExogSeries:
-    def __init__(self, series, na_strategy=None, resample_fill_strategy=None):
+    def __init__(self, series, na_strat=None, upsample_strat=None,
+                 downsample_strat=None):
         """Time series array wrapper
 
         A wrapper around an internally stored `pandas.Series`, it provides
@@ -575,7 +603,7 @@ class ExogSeries:
             The number of records, or size of the series
         type : numpy.dtype
             The series data type
-        na_strategy : {'backfill', 'bfill', 'pad', 'ffill', 'drop', None,
+        na_strat : {'backfill', 'bfill', 'pad', 'ffill', 'drop', None,
                        function}
             Indicates how `NaN` in the series are handled. This strategy
             applies only to existing `NaN` in the series when set. This does
@@ -587,8 +615,8 @@ class ExogSeries:
         Parameters
         -----------
         series : pandas.Series
-        na_strategy : {'backfill', 'bfill', 'pad', 'ffill', 'drop', 'asis',
-                       None, function}
+        na_strat : {'backfill', 'bfill', 'pad', 'ffill', 'drop', 'asis',
+                    None, function}
             The method used for handing `NaN` in the series. If `None`,
             defaults to `asis`
         resample_fill_strategy : {str, function, numpy ufunc, None}
@@ -596,20 +624,31 @@ class ExogSeries:
             `None`, 'ffill' is default. Please see `pands.DataFrame.apply` for
             details on this
         """
-        self._na_strategy = na_strategy if na_strategy else 'asis'
+        self._na_strat = na_strat if na_strat else 'asis'
 
-        if resample_fill_strategy is None:
-            self._resample_fill_strategy = 'ffill'
+        if downsample_strat is None:
+            self._downsample_strat = 'ffill'
         else:
-            self._resample_fill_strategy = resample_fill_strategy
+            self._allowed_downsample_strat(downsample_strat)
+            self._downsample_strat = downsample_strat
 
-        self._verify(series)
-        series = self._clean_series(series)
-        self._series = series
+        if upsample_strat is None:
+            self._upsample_strat = 'linear'
+        else:
+            self._allowed_upsample_strat(upsample_strat)
+            self._upsample_strat = upsample_strat
+
+        self.series = series
 
     @property
     def series(self):
         return self._series
+
+    @series.setter
+    def series(self, series):
+        self._verify(series)
+        series = self._clean_series(series)
+        self._series = series
 
     @property
     def frequency(self):
@@ -618,6 +657,10 @@ class ExogSeries:
     @property
     def series_name(self):
         return self.series.name
+
+    @series_name.setter
+    def series_name(self, name):
+        self._series = self.series.rename(name)
 
     @property
     def index_name(self):
@@ -644,20 +687,59 @@ class ExogSeries:
         return self.series.dtype
 
     @property
-    def na_strategy(self):
-        return self._na_strategy
+    def na_strat(self):
+        return self._na_strat
 
-    @na_strategy.setter
-    def na_strategy(self, strat):
-        self._na_strategy = strat
+    @na_strat.setter
+    def na_strat(self, strat):
+        self._na_strat = strat
 
     @property
-    def resample_fill_strategy(self):
-        return self._resample_fill_strategy
+    def downsample_strat(self):
+        return self._downsample_strat
 
-    @resample_fill_strategy.setter
-    def resample_fill_strategy(self, strat):
-        self._resample_fill_strategy = strat
+    @downsample_strat.setter
+    def downsample_strat(self, strat):
+        if self._allowed_downsample_strat(strat) is not True:
+            raise ValueError(f"strat {strat} is not allowed")
+
+        self._downsample_strat = strat
+
+    @property
+    def upsample_strat(self):
+        return self._upsample_strat
+
+    @upsample_strat.setter
+    def upsample_strat(self, strat):
+        if self._allowed_upsample_strat(strat) is not True:
+            raise ValueError(f"strat {strat} is not allowed")
+
+        self._upsample_strat = strat
+
+    def _allowed_downsample_strat(self, obj):
+        output = None
+        if obj == 'ffill' or obj == 'bfill':
+            output = True
+        elif callable(obj):
+            output = True
+        else:
+            output = False
+
+        return output
+
+    def _allowed_upsample_strat(self, obj):
+        output = None
+        allowed_strs = ['ffill', 'bfill', 'linear', 'time', 'index', 'values',
+                        'pad', 'nearest', 'zero', 'slinear', 'quadratic',
+                        'cubic', 'spline', 'barycentric', 'polynomial',
+                        'krogh', 'piecewise_polynomial', 'spline', 'pchip',
+                        'akima', 'from_derivatives']
+        if obj in allowed_strs:
+            output = True
+        else:
+            output = False
+
+        return output
 
     def has_na(self):
         """Check if series has NaN
@@ -698,8 +780,8 @@ class ExogSeries:
     def set_value(self, index, value):
         self._series[index] = value
 
-    def resample(self, freq, method=None, inplace=False):
-        """Resample, or group by, index
+    def resample(self, freq, strat=None, inplace=False, **kwargs):
+        """Resample series to new time period
 
         Used to up or down sample the series. Please see the object's
         `resample_fill_strategy` function on how the aggregation or expansion
@@ -707,22 +789,50 @@ class ExogSeries:
 
         Parameters
         ----------
-        freq : pandas.tseries.offsets.*
+        freq : pandas.tseries.offsets.*, str
             The new `ExogSeries` datetime frequency
-        method : {str, function, numpy ufunc, None}
-            How should the resampler handle aggregation/expansion. If `None`,
-            than the `ExogSeries` property `resample_fill_strategy` is used.
-            Please see `pands.DataFrame.apply` for details on this
+        method : (str, func)
+            The method for aggregation when downsampling and interpolation
+            when upsampling.
+
+            {'ffill', 'bfill', numpy ufunc, functions} methods are available
+            for downsampling. See `apply()` method for pandas' resamplers
+
+            {'ffill', 'bfill', 'linear', 'pad', interpolate methods} methods
+            are available for upsampling. See `interpolate()` method for
+            pandas' resamplers
         inplace : bool
             If `True`, than the method will set the `ExogSeries` data. Else,
             this method returns a new copy instead
+        **kwargs
+            Additional keyword parameters sent to `Series.resample` method
         """
-        method = method if method else self._resample_fill_strategy
-        result = self.series.resample(freq).apply(method)
 
-        if inplace is True:
-            self.series = result
+        freq = to_dateoffset(freq)
+        output = self.series.resample(freq, **kwargs)
+
+        if is_downsample(self.frequency, freq):
+            method = strat if strat else self._downsample_strat
+
+            output = output.apply(method)
+        elif is_upsample(self.frequency, freq):
+            method = strat if strat else self._upsample_strat
+
+            if method == 'ffill' or method == 'bfill':
+                output = output.apply(method)
+            else:
+                output = output.interpolate(method)
         else:
+            err_msg = (f"Frequency change from {self.frequency} to {freq} "
+                       "is not supported")
+            raise ValueError(err_msg)
+
+        if inplace:
+            self._series = output
+        else:
+            result = self.copy()
+            result.series = output
+
             return result
 
     def _verify(self, series):
@@ -742,17 +852,17 @@ class ExogSeries:
         fillna_methods = ['backfill', 'bfill', 'pad', 'ffill', None]
 
         output = None
-        if self._na_strategy is not None:
-            if self._na_strategy == 'drop':
+        if self._na_strat is not None:
+            if self._na_strat == 'drop':
                 output = series.dropna()
-            elif self._na_strategy == 'asis':
+            elif self._na_strat == 'asis':
                 output = series
-            elif self._na_strategy in fillna_methods:
-                output = series.fillna(method=self._na_strategy)
+            elif self._na_strat in fillna_methods:
+                output = series.fillna(method=self._na_strat)
             else:
                 output = series.replace(
                     pandas.np.nan,
-                    self._na_strategy(series))
+                    self._na_strat(series))
         else:
             output = series
 
@@ -840,7 +950,64 @@ class Transformations:
         return result
 
 
-def isinstance_pddt(index):
-    isit = isinstance(index, pandas.core.indexes.datetimes.DatetimeIndex)
+def is_datetimeindex(index):
+    return isinstance(index, pandas.core.indexes.datetimes.DatetimeIndex)
 
-    return isit
+
+def is_dateoffset(freq):
+    return isinstance(freq, pandas.tseries.offsets.DateOffset)
+
+
+def to_dateoffset(freq):
+    if isinstance(freq, str):
+        output = pandas.tseries.frequencies.to_offset(freq)
+    elif is_dateoffset(freq):
+        output = freq
+    else:
+        raise TypeError("'from_freq' is not str or DateOffset")
+
+    return output
+
+
+def is_upsample(from_freq, to_freq):
+    from_freq = to_dateoffset(from_freq)
+    to_freq = to_dateoffset(to_freq)
+
+    return freq_rank(from_freq) >= freq_rank(to_freq)
+
+
+def is_downsample(from_freq, to_freq):
+    from_freq = to_dateoffset(from_freq)
+    to_freq = to_dateoffset(to_freq)
+
+    return freq_rank(from_freq) <= freq_rank(to_freq)
+
+
+def freq_rank(freq):
+    if isinstance(freq, str):
+        pass
+    else:
+        freq = str(freq)
+
+    freq = freq.lower()
+
+    if freq.find('second') > 0:
+        output = 1
+    elif freq.find('minute') > 0:
+        output = 2
+    elif freq.find('hour') > 0:
+        output = 3
+    elif freq.find('day') > 0:
+        output = 4
+    elif freq.find('week') > 0:
+        output = 5
+    elif freq.find('month') > 0:
+        output = 6
+    elif freq.find('quarter') > 0:
+        output = 7
+    elif freq.find('year') > 0:
+        output = 8
+    else:
+        raise TypeError("Frequency not supported")
+
+    return output
