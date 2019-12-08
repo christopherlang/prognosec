@@ -5,6 +5,96 @@ import numpy
 import functions
 
 
+class testTimeseries(unittest.TestCase):
+    def setUp(self):
+        self.nrecs = 365
+        self.dataframe = pandas.DataFrame.from_dict({
+            'y1': list(range(self.nrecs)),
+            'y2': numpy.random.uniform(size=self.nrecs),
+            'y3': numpy.random.randint(2, size=self.nrecs)
+        })
+        self.dataframe.index = pandas.bdate_range('2018-01-01',
+                                                  periods=self.nrecs)
+        self.timeseries_nocal = timeseries.Timeseries(self.dataframe)
+
+        cal = timeseries.CAL_NASDAQ
+        self.timeseries_wcal = timeseries.Timeseries(self.dataframe,
+                                                     calendar=cal)
+
+        self.dataframe2 = pandas.DataFrame.from_dict({
+            'x1': list(range(self.nrecs)),
+            'x2': pandas.util.testing.rands_array(10, self.nrecs),
+            'x3': numpy.random.uniform(size=self.nrecs),
+            'x4': numpy.random.randint(2, size=self.nrecs)
+        })
+        self.dataframe2.index = pandas.bdate_range('2018-01-01',
+                                                   periods=self.nrecs)
+
+        self.exogframe = timeseries.ExogFrame(self.dataframe2)
+
+    def test_timeseries_setup(self):
+        self.assertEqual(self.timeseries_nocal.size_timeseries, self.nrecs)
+        self.assertLess(self.timeseries_wcal.size_timeseries, self.nrecs)
+
+    def test_specframe(self):
+        self.timeseries_nocal.get_specframe()
+        tmp = self.timeseries_nocal.copy()
+        tmp.exog = self.exogframe
+        self.timeseries_nocal.get_specframe()
+
+        self.assertIsInstance(tmp.get_specframe('y1'), pandas.DataFrame)
+
+        with self.assertRaises(ValueError):
+            tmp.get_specframe('x1')
+            tmp.get_specframe(eseries='y1')
+
+        tmp.get_specframe('y1', 'x1')
+
+    def test_specframe_exog_freq(self):
+        tmp = self.timeseries_nocal.copy()
+
+        dataframe2 = pandas.DataFrame.from_dict({
+            'x1': list(range(12)),
+            'x3': numpy.random.uniform(size=12),
+            'x4': numpy.random.randint(2, size=12)
+        })
+        dataframe2.index = pandas.bdate_range('2018-01-01', periods=12,
+                                              freq='MS')
+
+        exogframe = timeseries.ExogFrame(dataframe2)
+        tmp.exog = exogframe
+
+    def test_has_tseries(self):
+        ts = self.timeseries_nocal
+        self.assertTrue(ts.has_tseries('y1'))
+        self.assertFalse(ts.has_tseries('x1'))
+        self.assertIsInstance(ts.has_tseries(['y1', 'y2']), list)
+        self.assertSequenceEqual(ts.has_tseries(['y1', 'y2']), [True, True])
+        self.assertSequenceEqual(ts.has_tseries(['y1', 'x2']), [True, False])
+        self.assertTrue(ts.has_any_tseries(['y1', 'x2']))
+        self.assertFalse(ts.has_any_tseries(['b1', 'x2']))
+        self.assertTrue(ts.has_all_tseries(['y1', 'y2']))
+        self.assertFalse(ts.has_all_tseries(['b1', 'y2']))
+
+    def test_has_exogseries(self):
+        ts = self.timeseries_nocal
+        self.assertIsNone(ts.has_exogseries('x1'))
+
+        ts.exog = self.exogframe
+
+        self.assertTrue(ts.has_exogseries('x1'))
+        self.assertFalse(ts.has_exogseries('y1'))
+        self.assertIsInstance(ts.has_exogseries(['x1', 'x2']), list)
+        self.assertSequenceEqual(ts.has_exogseries(['x1', 'x2']),
+                                 [True, True])
+        self.assertSequenceEqual(ts.has_exogseries(['x1', 'y2']),
+                                 [True, False])
+        self.assertTrue(ts.has_any_exogseries(['x1', 'x2']))
+        self.assertFalse(ts.has_any_exogseries(['b1', 'y2']))
+        self.assertTrue(ts.has_all_exogseries(['x1', 'x2']))
+        self.assertFalse(ts.has_all_exogseries(['x1', 'y2']))
+
+
 class TestExogFrame(unittest.TestCase):
 
     def setUp(self):
@@ -19,6 +109,39 @@ class TestExogFrame(unittest.TestCase):
                                                   periods=self.nrecs)
 
         self.exogframe = timeseries.ExogFrame(self.dataframe)
+
+    def test_select_frame(self):
+        output_frame = self.exogframe.select_frame()
+        self.assertIsInstance(output_frame, pandas.DataFrame)
+        self.assertEqual(len(output_frame.columns),
+                         len(self.dataframe.columns))
+
+        output_frame1 = self.exogframe.select_frame('x1')
+        self.assertEqual(len(output_frame1.columns), 1)
+
+        output_frame1 = self.exogframe.select_frame(('x1', 'x3'))
+        self.assertEqual(len(output_frame1.columns), 2)
+        self.assertEqual(output_frame1.index.name, self.dataframe.index.name)
+
+    def test_select_frame_order(self):
+        output_frame2 = self.exogframe.select_frame(('x3', 'x1'))
+        self.assertSequenceEqual(list(output_frame2.columns), ['x3', 'x1'])
+
+    def test_select_frame_join_on(self):
+        output_frame = self.exogframe.select_frame('x1', 'x1')
+        self.assertEqual(len(output_frame.columns), 1)
+        self.assertSequenceEqual(list(output_frame.columns), ['x1'])
+
+        output_frame1 = self.exogframe.select_frame(['x1', 'x3'], 'x4')
+        self.assertEqual(len(output_frame1.columns), 3)
+        self.assertSequenceEqual(list(output_frame1.columns),
+                                 ['x4', 'x1', 'x3'])
+
+        output_frame2 = self.exogframe.select_frame(join_on='x4')
+        self.assertEqual(len(output_frame2.columns),
+                         len(self.dataframe.columns))
+        self.assertSequenceEqual(list(output_frame2.columns),
+                                 ['x4', 'x1', 'x2', 'x3'])
 
     def test_exogseries_storage(self):
         self.assertIsInstance(self.exogframe.exogseries, dict)
@@ -36,9 +159,9 @@ class TestExogFrame(unittest.TestCase):
         self.exogframe.resample('W')
 
     def test_downsampling_mean_var_x3(self):
-        origseries = self.exogframe.get_series('x3').series
+        origseries = self.exogframe.get_exogseries('x3').series
         execresult = self.exogframe.resample('MS', method=numpy.mean)
-        execresult = execresult.get_series('x3').series
+        execresult = execresult.get_exogseries('x3').series
 
         expected_jan = origseries.loc['2019-01-01':'2019-01-31'].mean()
         expected_feb = origseries.loc['2019-02-01':'2019-02-28'].mean()
@@ -53,9 +176,9 @@ class TestExogFrame(unittest.TestCase):
         self.assertAlmostEqual(resampled_mar, expected_mar, places=6)
 
     def test_upsampling_ffill_var_x4(self):
-        origseries = self.exogframe.get_series('x4').series
+        origseries = self.exogframe.get_exogseries('x4').series
         execresult = self.exogframe.resample('H', method='ffill')
-        execresult = execresult.get_series('x4').series
+        execresult = execresult.get_exogseries('x4').series
 
         expected_201901 = origseries.loc['2019-01-15']
         expected_201902 = origseries.loc['2019-02-11']
@@ -70,15 +193,25 @@ class TestExogFrame(unittest.TestCase):
         self.assertAlmostEqual(resampled_mar, expected_201903, places=6)
 
     def test_downsampling_single_series_x1(self):
-        origseries = self.exogframe.get_series('x1').series
+        origseries = self.exogframe.get_exogseries('x1').series
         execresult = self.exogframe.resample('MS', method={'x1': 'ffill'})
 
-        self.assertGreater(origseries.size, execresult.get_series('x1').size)
+        self.assertGreater(origseries.size,
+                           execresult.get_exogseries('x1').size)
 
         execresult = self.exogframe.resample('MS', series='x1',
                                              method={'x1': 'ffill'})
-        self.assertEqual(self.exogframe.get_series('x2').size,
-                         execresult.get_series('x2').size)
+        self.assertEqual(self.exogframe.get_exogseries('x2').size,
+                         execresult.get_exogseries('x2').size)
+
+    def test_series_selection(self):
+        self.assertEqual(len(self.exogframe.select_exogseries()),
+                         self.exogframe.nseries)
+        self.assertEqual(len(self.exogframe.select_exogseries('x2')), 1)
+        self.assertEqual(len(self.exogframe.select_exogseries(['x1', 'x2'])),
+                         2)
+        self.assertEqual(len(self.exogframe.select_exogseries(('x1', 'x2'))),
+                         2)
 
 
 class TestExogSeries(unittest.TestCase):
