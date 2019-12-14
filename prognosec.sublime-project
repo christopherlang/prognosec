@@ -2,26 +2,27 @@
 	"build_systems":
 	[
 		{
-			"cancel":
-			{
-				"kill": true
-			},
-			"cmd":
-			[
-				"python",
-				"-u",
-				"$file"
-			],
+			"shell_cmd": "/home/chlang/.config/sublime-text-3/Packages/User/env_scripts/init_ipython_conda_default.sh",
+			// "cmd":
+			// [
+			// 	"conda", "activate", "promometheus",
+			// 	"&&",
+			// 	"pytest",
+   //              "-v",
+   //              "$file_name"
+			// ],
 			"env":
 			{
 				"PYTHONIOENCODING": "utf-8",
 				"PYTHONPATH": "/home/chlang/Projects/prognosec/prognosec"
 			},
 			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
-			"name": "prognosec build",
+			"name": "prognosec pytest build",
 			"selector": "source.python",
-			"target": "execute_conda_environment",
-			"working_dir": "${project_path}/prognosec"
+			// "target": "terminus_exec",
+			// "cancel": "terminus_cancel_build",
+			"working_dir": "$project_path/tests"
+
 		},
 		{
 			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
@@ -34,8 +35,11 @@
 	"folders":
 	[
 		{
-			"path": ".",
-			"folder_exclude_patterns": ["__pycache__"]
+			"folder_exclude_patterns":
+			[
+				"__pycache__"
+			],
+			"path": "."
 		}
 	],
 	"settings":

@@ -17,7 +17,7 @@ an `apply` method.
 * `functions` : For a standardized set of transformation functions
 
 ## Functional Requirements
-The following outlines the class' features, behaviors, and minimum defintions.
+The following outlines the class' features, behaviors, and minimum definitions.
 
 ### Features and Behaviors
 * A `procedure` is directly accessible through as a `property`
@@ -37,10 +37,10 @@ The following outlines the class' features, behaviors, and minimum defintions.
 * Always return a `numpy.ndarray` when asked
 
 ### Minimum definitions
-The following definitions **must** be included in the class
+The following class attributes (i.e. properties and methods) **must** be defined.
 
-#### `property`
-Properties should be computed and/or created on the fly to enable up-to-date information
+#### Properties
+Instance `property` should be computed and/or created on the fly to enable up-to-date information
     
 | Name          | Setter    | Return                            | Description                                                                           |
 |-------------  |--------   |---------------------------------  |-------------------------------------------------------------------------------------  |
@@ -50,6 +50,7 @@ Properties should be computed and/or created on the fly to enable up-to-date inf
 | `plan`        | No        | `list[tuple[int, str]]`, `None`   | Shows the order of function application `Transformation` will perform when executed   |
 
 #### `property` setters
+All instance `property` must type checked, raising errors otherwise
 
 | Name          | Input Type        | Description                                                                       | Errors                            |
 |-------------  |------------------ |--------------------------------------------------------------------------------   |-------------------------------    |

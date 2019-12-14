@@ -1,7 +1,7 @@
 import collections
+import copy
 import pandas
 import numpy
-import copy
 
 
 class Transformation:
@@ -13,14 +13,18 @@ class Transformation:
 
     Attributes
     ----------
-    procedure : list[function], empty list
-        A list of functions to be applied to a data series. Functions are
-        applied in order of the list
+    procedure : list[function]
+        A sequence of functions to be applied to a data series. Functions are
+        applied in order of the list. If `list` is empty, then no functions are
+        stored
     size : int
         The number of functions stored
     empty : bool
         Whether there any functions. If zero, there are none, and data series
         passed to `apply` will be passed back
+    plan : str, None
+        A string representation of the transformation functions to be applied,
+        in order. If there are no functions, then `None` is returned
     """
 
     def __init__(self):
@@ -31,14 +35,14 @@ class Transformation:
         return self._procedure
 
     @procedure.setter
-    def procedure(self, list_of_func):
-        if isinstance(list_of_func, list) is not True:
-            raise TypeError("'list_of_func' should be a list")
+    def procedure(self, proc):
+        if isinstance(proc, list) is not True:
+            raise TypeError("'proc' should be a list")
 
-        if callable_sequence(list_of_func) is not True:
-            raise TypeError("'list_of_func' should be a list of functions")
+        if callable_sequence(proc) is not True:
+            raise TypeError("'proc' should be a list of functions")
 
-        self._procedure = list_of_func
+        self._procedure = proc
 
     @property
     def size(self):
@@ -68,7 +72,7 @@ class Transformation:
         """
         return copy.deepcopy(self)
 
-    def get(self, index):
+    def get(self, index: int):
         """Retrieve a transformation function by index
 
         Indexing is the same as a `list` object.
@@ -200,9 +204,31 @@ class Transformation:
         self.procedure.append(func)
 
     def clear(self):
+        """Clear all functions from procedure"""
         self.procedure.clear()
 
     def apply(self, data_series):
+        """Apply transformations onto a data series
+
+        The sequence of transformation functions stored in this object will
+        be applied sequentially onto the data series. If there are no functions
+        e.g. `self.size == 0` then the data series provided will be returned
+        as-is, converted to a `numpy.ndarray` if `data_series` is a `tuple` or
+        a `list`.
+
+        Parameters
+        ----------
+        data_series : pandas.Series, numpy.ndarray, list, tuple
+            The data series to apply the transformations
+
+        Returns
+        -------
+        pandas.Series, numpy.ndarray
+            A copy of the data series is returned. If `data_series` is either
+            a `pandas.Series` or `numpy.ndarray`, then the same types will be
+            returned. If `list` or `tuple`, then it is converted to a
+            `numpy.ndarray`
+        """
         output = copy.deepcopy(data_series)
         for a_trans_fun in self.procedure:
             output = a_trans_fun(output)
@@ -223,16 +249,117 @@ class Transformation:
 
 
 def is_sequence(x):
+    """Test if x is of type {`tuple`, `list`, `set`, `numpy.ndarray`}"""
     return isinstance(x, (tuple, list, set, numpy.ndarray))
 
 
 def is_tuple_or_list(x):
+    """Test if x is of type {`tuple`, `list`}"""
     return isinstance(x, (tuple, list))
 
 
 def isinstance_sequence(x, obj_type):
+    """Test if all objects in `x` is of type `obj_type`"""
     return all([isinstance(i, obj_type) for i in x])
 
 
 def callable_sequence(x):
+    """Test if all objects in `x` are callable (e.g. functions)"""
     return all([callable(i) for i in x])
+
+
+def is_time_index(x):
+    acceptable_index_type = (pandas.DatetimeIndex, pandas.PeriodIndex,
+                             pandas.TimedeltaIndex)
+
+    return isinstance(x, acceptable_index_type)
+
+
+def is_dateoffset(freq):
+    return isinstance(freq, pandas.tseries.offsets.DateOffset)
+
+
+def to_dateoffset(freq):
+    if isinstance(freq, str):
+        output = pandas.tseries.frequencies.to_offset(freq)
+    elif is_dateoffset(freq):
+        output = freq
+    else:
+        raise TypeError("'from_freq' is not str or DateOffset")
+
+    return output
+
+
+def is_upsample(from_freq, to_freq):
+    from_freq = to_dateoffset(from_freq)
+    to_freq = to_dateoffset(to_freq)
+
+    return freq_rank(from_freq) > freq_rank(to_freq)
+
+
+def is_downsample(from_freq, to_freq):
+    from_freq = to_dateoffset(from_freq)
+    to_freq = to_dateoffset(to_freq)
+
+    return freq_rank(from_freq) < freq_rank(to_freq)
+
+
+def freq_rank(freq):
+    if isinstance(freq, str):
+        pass
+    else:
+        freq = str(freq)
+
+    freq = freq.lower()
+
+    if freq.find('second') > 0:
+        output = 1
+    elif freq.find('minute') > 0:
+        output = 2
+    elif freq.find('hour') > 0:
+        output = 3
+    elif freq.find('day') > 0 and freq.find('week') == -1:
+        output = 4
+    elif freq.find('week') > 0:
+        output = 5
+    elif (freq.find('month') > 0 and freq.find('quarter') == -1 and
+            freq.find('year') == -1):
+        output = 6
+    elif freq.find('quarter') > 0:
+        output = 7
+    elif freq.find('year') > 0:
+        output = 8
+    else:
+        raise TypeError("Frequency not supported")
+
+    return output
+
+
+def base_freq(freq):
+    if isinstance(freq, str):
+        pass
+    else:
+        freq = str(freq)
+
+    freq = freq.lower()
+
+    if freq.find('second') > 0:
+        output = 'second'
+    elif freq.find('minute') > 0:
+        output = 'minute'
+    elif freq.find('hour') > 0:
+        output = 'hour'
+    elif freq.find('day') > 0:
+        output = 'day'
+    elif freq.find('week') > 0:
+        output = 'week'
+    elif freq.find('month') > 0:
+        output = 'month'
+    elif freq.find('quarter') > 0:
+        output = 'quarter'
+    elif freq.find('year') > 0:
+        output = 'year'
+    else:
+        raise TypeError("Frequency not supported")
+
+    return output
