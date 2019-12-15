@@ -1,3 +1,4 @@
+import collections
 import copy
 import numpy
 import pandas
@@ -5,9 +6,11 @@ import functools
 import progutils
 
 """
-functions starting with `t` is a transformation function
-functions starting with `a` is an aggrgation function
-function starting with `r` is a upsampling function
+functions starting with `trans` is a transformation function
+functions starting with `agg` is an aggrgation function
+functions starting with `sampleup` is a upsampling function
+functions starting with `sampledown` is a downsampling function
+functions starting with `fillnan` is s `NaN` fill function
 """
 
 
@@ -73,60 +76,87 @@ class UpsampleFunction(TransformationFunction):
         return f"<UpsampleFunction: {self.__str__()}>"
 
 
-def t_log():
+def trans_log():
     func = functools.partial(numpy.log)
     output_func = TransformationFunction(func, 'ln')
 
     return output_func
 
 
-def t_ln():
-    return t_log()
+def trans_ln():
+    return trans_log()
 
 
-def t_log10():
+def trans_log10():
     func = functools.partial(numpy.log10)
     output_func = TransformationFunction(func, 'log10')
 
     return output_func
 
 
-def t_log1p():
+def trans_log1p():
     func = functools.partial(numpy.log1p)
     output_func = TransformationFunction(func, 'log1p')
 
     return output_func
 
 
-def t_log2():
+def trans_log2():
     func = functools.partial(numpy.log2)
     output_func = TransformationFunction(func, 'log2')
 
     return output_func
 
 
-def t_sqrt():
+def trans_sqrt():
     func = functools.partial(numpy.sqrt)
     output_func = TransformationFunction(func, 'sqrt')
 
     return output_func
 
 
-def t_reverse():
+def trans_reverse():
     func = functools.partial(numpy.flip)
     output_func = TransformationFunction(func, 'reverse')
 
     return output_func
 
 
-def t_flip():
+def trans_flip():
     func = functools.partial(numpy.flip)
     output_func = TransformationFunction(func, 'flip')
 
     return output_func
 
 
-def t_inverse(add=0):
+def trans_shift(shift=1):
+    def shift_array(x, shift=shift):
+        if progutils.is_tuple_or_list(x):
+            x = numpy.array(x)
+
+        input_array = x.astype(float)
+
+        if shift > 0:
+            output = numpy.roll(input_array, shift)
+            output[:shift] = numpy.nan
+        elif shift < 0:
+            output = numpy.roll(input_array, shift)
+            output[shift:] = numpy.nan
+        else:
+            # For when shift == 0
+            output = input_array
+
+        if isinstance(x, pandas.Series):
+            output_series = output
+            output = x.copy(deep=True)
+            output[:] = output_series
+
+        return output
+
+    return shift_array
+
+
+def trans_inverse(add=0):
     def inverse(x, add=add):
         if progutils.is_tuple_or_list(x):
             x = numpy.array(x)
@@ -134,7 +164,11 @@ def t_inverse(add=0):
         return 1 / (x + add)
 
     func = functools.partial(inverse)
-    output_func = TransformationFunction(func, 'inverse', {'add': add})
+
+    param_dict = collections.OrderedDict()
+    param_dict['add'] = add
+
+    output_func = TransformationFunction(func, 'inverse', param_dict)
 
     return output_func
 
@@ -202,7 +236,7 @@ def agg_min():
     return output_func
 
 
-def fnan_aggregate(agg_fill_func=agg_mean()):
+def fillnan_aggregate(agg_fill_func=agg_mean()):
     def nan_fill_agg(x):
         fill_value = agg_fill_func(x)
         x = copy.deepcopy(x)
@@ -212,13 +246,17 @@ def fnan_aggregate(agg_fill_func=agg_mean()):
         return x
 
     func = functools.partial(nan_fill_agg)
+
+    param_dict = collections.OrderedDict()
+    param_dict['method'] = agg_fill_func.name
+
     output_func = MissingValueFillFunction(func, 'nan_fill_aggregate',
-                                           {'method': agg_fill_func.name})
+                                           param_dict)
 
     return output_func
 
 
-def dsample_mean():
+def sampledown_mean():
     agg_func = agg_mean()
 
     func = functools.partial(agg_func._func)
@@ -227,7 +265,7 @@ def dsample_mean():
     return output_func
 
 
-def dsample_median():
+def sampledown_median():
     agg_func = agg_median()
 
     func = functools.partial(agg_func._func)
@@ -236,7 +274,7 @@ def dsample_median():
     return output_func
 
 
-def dsample_max():
+def sampledown_max():
     agg_func = agg_max()
 
     func = functools.partial(agg_func._func)
@@ -245,7 +283,7 @@ def dsample_max():
     return output_func
 
 
-def dsample_min():
+def sampledown_min():
     agg_func = agg_min()
 
     func = functools.partial(agg_func._func)
