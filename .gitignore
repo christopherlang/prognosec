@@ -8,6 +8,7 @@
 
 # Particular jupyter notebooks
 notebooks/Untitled*.ipynb
+notebooks/Scratch*.ipynb
 
 # Data related text files
 data/**/*.md
