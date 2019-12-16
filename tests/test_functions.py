@@ -1,9 +1,9 @@
 import numpy
 import pytest
 import pandas
-import exceptions
-import progutils
-import functions
+from progutils import progexceptions
+from progutils import progutils
+from progutils import progfunc
 
 
 class TestTransShiftFunction:
@@ -12,7 +12,7 @@ class TestTransShiftFunction:
 
     @pytest.fixture
     def trans_shift(self):
-        return functions.trans_shift
+        return progfunc.trans_shift
 
     @pytest.yield_fixture
     def arrays(self):
@@ -39,7 +39,7 @@ class TestTransShiftFunction:
         yield direction_generator()
 
     def test_exists(self):
-        assert hasattr(functions, 'trans_shift')
+        assert hasattr(progfunc, 'trans_shift')
 
     def test_shifting_output_size(self, trans_shift, arrays, shift_sizes,
                                   shift_direction):

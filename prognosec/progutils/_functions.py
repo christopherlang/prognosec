@@ -3,7 +3,7 @@ import copy
 import numpy
 import pandas
 import functools
-import progutils
+from progutils import progutils
 
 """
 functions starting with `trans` is a transformation function

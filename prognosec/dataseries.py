@@ -2,9 +2,12 @@ import collections
 import copy
 import pandas
 import numpy
-import functions
-import progutils
-import exceptions
+# import functions
+# import progutils
+# import exceptions
+from progutils import progfunc
+from progutils import progutils
+from progutils import progexceptions
 
 NAN_STR_METHODS = ('backfill', 'bfill', 'pad', 'ffill', 'asis', 'drop')
 INF_STR_METHODS = ('asis', 'asna', 'zero')
@@ -28,11 +31,11 @@ class SeriesFrame:
 
         if progutils.is_time_index(findex) is False:
             msg = "'index' must be a time index"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         if isinstance(findexname, str) is False:
             msg = "'index_name' must be string"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         self._frame = split_df['frame']
 
@@ -56,7 +59,7 @@ class SeriesFrame:
     def index(self, index):
         if progutils.is_time_index(index) is False:
             msg = f"index type {type(index)} is not a datetime index"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         self._index = index
 
@@ -68,7 +71,7 @@ class SeriesFrame:
     def name_index(self, index_name):
         if isinstance(index_name, str) is False:
             msg = "index_name must be a string"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         self._name_index = index_name
 
@@ -97,18 +100,18 @@ class SeriesFrame:
     def add(self, series, series_name=None):
         if isinstance(series, Timeseries) is False:
             msg = "'series' should be a 'Timeseries' instance"
-            raise exceptions.SeriesIntegrityError(msg)
+            raise progexceptions.SeriesIntegrityError(msg)
 
         if series_name is None:
             series_name = series.name_series
         else:
             if isinstance(series_name, str) is False:
                 msg = "'series_name' must be a `str`"
-                raise exceptions.SeriesIntegrityError(msg)
+                raise progexceptions.SeriesIntegrityError(msg)
 
         if series_name in self._frame.keys():
             msg = f"'{series_name}' already exists"
-            raise exceptions.SeriesIntegrityError(msg)
+            raise progexceptions.SeriesIntegrityError(msg)
 
         series.name_series = series_name
 
@@ -117,7 +120,7 @@ class SeriesFrame:
     def remove(self, series_name):
         if isinstance(series_name, str) is False:
             msg = "'series_name' must be 'str'"
-            raise exceptions.SeriesIntegrityError(msg)
+            raise progexceptions.SeriesIntegrityError(msg)
 
         if series_name not in self._frame.keys():
             raise KeyError(f"series named '{series_name}' does not exist")
@@ -129,14 +132,15 @@ class SeriesFrame:
 
     def replace(self, series, series_name=None):
         if isinstance(series, Timeseries) is False:
-            raise exceptions.SeriesIntegrityError("series must be Timeseries")
+            msg = "series must be Timeseries"
+            raise progexceptions.SeriesIntegrityError(msg)
 
         if series_name is None:
             series_name = series.name_series
         else:
             if isinstance(series_name, str) is False:
                 msg = "'series_name' must be a `str`"
-                raise exceptions.SeriesIntegrityError(msg)
+                raise progexceptions.SeriesIntegrityError(msg)
 
         series.name_series = series_name
 
@@ -271,11 +275,11 @@ class Timeseries:
         if isinstance(series, pandas.Series) is not True:
             if index is None:
                 errmsg = "Index must be provided for non-pandas.Series"
-                raise exceptions.IndexTypeError(errmsg)
+                raise progexceptions.IndexTypeError(errmsg)
             elif progutils.is_time_index(index) is not True:
                 errmsg = f"'index' parameter must be of type 'DatetimeIndex', "
                 errmsg += "'PeriodIndex', or 'TimedeltaIndex'"
-                raise exceptions.IndexTypeError(errmsg)
+                raise progexceptions.IndexTypeError(errmsg)
 
             prepped_series = pandas.Series(series, index=index)
         else:
@@ -287,14 +291,14 @@ class Timeseries:
                 prepped_series.name = series_name
             except TypeError as e:
                 msg = ". ".join(e.args)
-                raise exceptions.SeriesIntegrityError(msg)
+                raise progexceptions.SeriesIntegrityError(msg)
 
         if index_name is not None:
             try:
                 prepped_series.index.name = index_name
             except TypeError as e:
                 msg = ". ".join(e.args)
-                raise exceptions.IndexIntegrityError(msg)
+                raise progexceptions.IndexIntegrityError(msg)
 
         self._verify_new_series(prepped_series)
 
@@ -358,7 +362,8 @@ class Timeseries:
         new_name : str
         """
         if isinstance(new_name, str) is False:
-            raise exceptions.IndexIntegrityError("index name must be string")
+            msg = "index name must be string"
+            raise progexceptions.IndexIntegrityError(msg)
 
         self._series.index.name = new_name
 
@@ -381,7 +386,8 @@ class Timeseries:
         new_name : str
         """
         if isinstance(new_name, str) is False:
-            raise exceptions.SeriesIntegrityError("series name must be string")
+            msg = "series name must be string"
+            raise progexceptions.SeriesIntegrityError(msg)
 
         self._series.name = new_name
 
@@ -472,11 +478,11 @@ class Timeseries:
         if isinstance(method, str):
             if method not in NAN_STR_METHODS:
                 msg = f"'{method}' string method is invalid"
-                raise exceptions.ComputeMethodError(msg)
+                raise progexceptions.ComputeMethodError(msg)
         elif callable(method):
-            if not isinstance(method, functions.MissingValueFillFunction):
+            if not isinstance(method, progfunc.MissingValueFillFunction):
                 msg = "function method is not a MissingValueFillFunction"
-                raise exceptions.ComputeMethodError(msg)
+                raise progexceptions.ComputeMethodError(msg)
 
         self._strats['na_handling'] = method
 
@@ -517,7 +523,7 @@ class Timeseries:
         if isinstance(method, str):
             if method not in INF_STR_METHODS:
                 msg = f"'{method}' string method is invalid"
-                raise exceptions.ComputeMethodError(msg)
+                raise progexceptions.ComputeMethodError(msg)
         elif (numpy.isscalar(method) and numpy.isreal(method) and
                 isinstance(method, bool) is False):
             # If int or float, let it pass
@@ -525,7 +531,8 @@ class Timeseries:
             # more complicate one above is to try to get rid of this
             pass
         else:
-            raise exceptions.ComputeMethodError("Invalid 'strat_inf' method")
+            msg = "Invalid 'strat_inf' method"
+            raise progexceptions.ComputeMethodError(msg)
 
         self._strats['inf_handling'] = method
 
@@ -565,12 +572,12 @@ class Timeseries:
             if (method not in UPSAMPLE_STR_APPLY_METHODS and
                     method not in UPSAMPLE_STR_INTER_METHODS):
                 msg = "Method provided is invalid"
-                raise exceptions.ComputeMethodError(msg)
-        elif isinstance(method, functions.AggregateFunction):
+                raise progexceptions.ComputeMethodError(msg)
+        elif isinstance(method, progfunc.AggregateFunction):
             pass
         else:
             msg = "Method provided is invalid"
-            raise exceptions.ComputeMethodError(msg)
+            raise progexceptions.ComputeMethodError(msg)
 
         self._strats['upsampling'] = method
 
@@ -602,14 +609,14 @@ class Timeseries:
             or mean aggregation.
         """
         if method is None:
-            method = functions.sampledown_mean()
+            method = progfunc.sampledown_mean()
 
         if callable(method):
-            if isinstance(method, functions.DownsampleFunction) is False:
+            if isinstance(method, progfunc.DownsampleFunction) is False:
                 msg = "Not a DownsampleFunction"
-                raise exceptions.ComputeMethodError(msg)
+                raise progexceptions.ComputeMethodError(msg)
         else:
-            raise exceptions.ComputeMethodError("Method is not a function")
+            raise progexceptions.ComputeMethodError("Method is not a function")
 
         self._strats['downsampling'] = method
 
@@ -670,24 +677,25 @@ class Timeseries:
         """
         if series.index.has_duplicates is True:
             msg = "series index has duplicate values"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         if series.index.name is None:
-            raise exceptions.IndexIntegrityError("Index must be named")
+            raise progexceptions.IndexIntegrityError("Index must be named")
 
         if isinstance(series.index.name, str) is False:
             msg = "Index name must be a string"
-            raise exceptions.IndexIntegrityError(msg)
+            raise progexceptions.IndexIntegrityError(msg)
 
         if series.name is None:
-            raise exceptions.SeriesIntegrityError("Series must have name")
+            raise progexceptions.SeriesIntegrityError("Series must have name")
 
         if isinstance(series.name, str) is False:
             msg = "Series name must be a string"
-            raise exceptions.SeriesIntegrityError(msg)
+            raise progexceptions.SeriesIntegrityError(msg)
 
         if hasattr(series.index, 'freq') is False or series.index.freq is None:
-            raise exceptions.IndexIntegrityError("index must have frequency")
+            msg = "index must have frequency"
+            raise progexceptions.IndexIntegrityError(msg)
 
     def _clean_series(self, series):
         """Applies cleaning procedures to the series
@@ -720,13 +728,14 @@ class Timeseries:
                 series = series.replace(numpy.inf, numpy.nan)
             else:
                 msg = "'strat_na' not implemented"
-                raise exceptions.ComputeMethodError(msg)
+                raise progexceptions.ComputeMethodError(msg)
         elif (numpy.isscalar(self.strat_inf) and
                 numpy.isreal(self.strat_inf) and
                 isinstance(self.strat_inf, bool) is False):
             series = series.replace(numpy.inf, self.strat_inf)
         else:
-            raise exceptions.ComputeMethodError("'strat_inf' not supported")
+            msg = "'strat_inf' not supported"
+            raise progexceptions.ComputeMethodError(msg)
 
         if self.strat_na in NAN_STR_METHODS:
             if self.strat_na == 'asis':
@@ -736,13 +745,13 @@ class Timeseries:
                 series = series.dropna()
             else:
                 series = series.fillna(method=self.strat_na)
-        elif isinstance(self.strat_na, functions.MissingValueFillFunction):
+        elif isinstance(self.strat_na, progfunc.MissingValueFillFunction):
             series = self.strat_na(series)
         elif numpy.isscalar(self.strat_na) or isinstance(self.strat_na, dict):
             # Fill in using value parameter. Please see `pandas.Series.fillna`
             series = series.fillna(value=self.strat_na)
         else:
-            raise exceptions.ComputeMethodError("'strat_na' not supported")
+            raise progexceptions.ComputeMethodError("'strat_na' not supported")
 
         return series
 
@@ -906,7 +915,7 @@ class Timeseries:
 
         if progutils.is_upsample(self.freq, to_freq) is True:
 
-            if isinstance(self.strat_up, functions.UpsampleFunction):
+            if isinstance(self.strat_up, progfunc.UpsampleFunction):
                 raise TypeError("UpsampleFunction not implemented")
             elif self.strat_up in UPSAMPLE_STR_APPLY_METHODS:
                 resample_exec = series_resampled.apply(self.strat_up)

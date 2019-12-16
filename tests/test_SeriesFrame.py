@@ -5,9 +5,9 @@ import numpy
 import string
 import pandas
 import dataseries
-import progutils
-import exceptions
-import functions
+from progutils import progutils
+from progutils import progexceptions
+from progutils import progfunc
 
 
 class TestSeriesFrame:
@@ -45,7 +45,7 @@ class TestSeriesFrame:
     @pytest.fixture
     def new_timeseries(self, index):
         series = list(range(TestSeriesFrame.nrecs))
-        series = functions.trans_inverse(add=1)(series)
+        series = progfunc.trans_inverse(add=1)(series)
         series = pandas.Series(series, index=index, name='x4')
 
         return dataseries.Timeseries(series)
@@ -89,7 +89,7 @@ class TestSeriesFrame:
         except AttributeError:
             pytest.fail("index property doesn't allow setting")
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             sf_pdf.index = pandas.RangeIndex(0, 9)
 
     def test_has_name_index(self, sf_pdf):
@@ -102,7 +102,7 @@ class TestSeriesFrame:
         except AttributeError:
             pytest.fail("name_index property doesn't allow setting")
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             sf_pdf.name_index = 600
 
     def test_has_freq_property(self, sf_pdf):
@@ -124,16 +124,16 @@ class TestSeriesFrame:
             pytest.fail("SeriesFrame missing add method")
 
     def test_add_method_name_must_be_str(self, sf_pdf, new_timeseries):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             # Should fail if series_name is
             sf_pdf.add(new_timeseries, series_name=500)
 
     def test_add_method_fails_on_wrong_type(self, sf_pdf):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             sf_pdf.add([1, 2, 3, 4, 5])
 
     def test_add_method_fails_wrong_name_type(self, sf_pdf, new_timeseries):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             sf_pdf.add(new_timeseries, series_name=50)
 
     def test_add_method_name_is_set(self, sf_pdf, new_timeseries):
@@ -165,10 +165,10 @@ class TestSeriesFrame:
             '2019-01-01', periods=TestSeriesFrame.nrecs + 10, freq='D',
             name='date'
         )
-        series = functions.trans_inverse(add=1)(series)
+        series = progfunc.trans_inverse(add=1)(series)
         series = pandas.Series(series, index=index, name='x4')
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             sf_pdf.add(series)
 
     def test_has_remove_method(self, sf_pdf):
@@ -217,11 +217,11 @@ class TestSeriesFrame:
     def test_replace_method_series_type_check(self, sf_pdf):
         new_series = pandas.Series(range(1000), name='hello')
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             sf_pdf.replace(new_series, series_name='x6')
 
     def test_replace_method_name_type_check(self, sf_pdf, new_timeseries):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             sf_pdf.replace(new_timeseries, series_name=100)
 
     def test_has_access_series_method(self, sf_pdf):

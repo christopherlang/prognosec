@@ -3,9 +3,9 @@ import pytest
 import pandas
 import numpy
 import dataseries
-import progutils
-import exceptions
-import functions
+from progutils import progutils
+from progutils import progexceptions
+from progutils import progfunc
 
 
 class TestTimeseries:
@@ -112,7 +112,7 @@ class TestTimeseries:
         # Index must be of DatetimeIndex, PeriodIndex, TimedeltaIndex
         series = list(data_sequence)
 
-        with pytest.raises(exceptions.IndexTypeError):
+        with pytest.raises(progexceptions.IndexTypeError):
             dataseries.Timeseries(series=series, index=range(num_records))
 
     def test_nonpandas_series_raise_on_no_index(self, data_sequence):
@@ -120,7 +120,7 @@ class TestTimeseries:
         # supplied and of the right type
         series = list(data_sequence)
 
-        with pytest.raises(exceptions.IndexTypeError):
+        with pytest.raises(progexceptions.IndexTypeError):
             dataseries.Timeseries(series=series)
 
     def test_has_index_property(self, timeseries_periodindex):
@@ -151,11 +151,11 @@ class TestTimeseries:
 
         index_period = copy.deepcopy(index_period)
         index_period.name = None
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=series_name)
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=series_name,
                                   index_name=tuple([1, 2]))
@@ -168,7 +168,7 @@ class TestTimeseries:
         index[10] += 1  # Increment by one day. Should cause duplicates
         index = pandas.PeriodIndex(index, freq=frequency_str)
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries(series=data_sequence, index=index)
 
     def test_has_name_series_property(self, timeseries_periodindex):
@@ -188,29 +188,29 @@ class TestTimeseries:
     def test_name_series_setter_type_check(self, timeseries_periodindex):
         ts = copy.deepcopy(timeseries_periodindex)
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             ts.name_series = 600
 
     def test_name_series_property_must_be_string(self, index_period,
                                                  data_sequence):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=tuple([3, 4]))
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             # pandas raises TypeError if setting of series name uses unhashable
             # types. Capture this and re-raise
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=set([3, 4]))
 
     def test_nonpandas_input_must_have_name(self, index_period, data_sequence):
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             dataseries.Timeseries(series=data_sequence, index=index_period)
 
     def test_pandas_input_must_have_name(self, index_period, data_sequence):
         ps = pandas.Series(data_sequence, index=index_period)
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             dataseries.Timeseries(series=ps)
 
     def test_has_freq_property(self, timeseries_periodindex):
@@ -228,7 +228,7 @@ class TestTimeseries:
 
         pseries = pandas.Series(data_sequence, index=index, name=series_name)
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries(pseries)
 
     def test_nonpandas_input_must_have_freq(self, index_datetime,
@@ -236,7 +236,7 @@ class TestTimeseries:
         index = copy.deepcopy(index_datetime)
         index.freq = None
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries(series=data_sequence, index=index,
                                   series_name=series_name)
 
@@ -316,7 +316,7 @@ class TestTimeseries:
 
         pseries = pandas.Series(data_sequence, index=index, name='x2')
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries._verify_new_series(series=pseries)
 
     def test_verify_method_check_index_has_name(self, data_sequence,
@@ -326,7 +326,7 @@ class TestTimeseries:
 
         pseries = pandas.Series(data_sequence, index=index, name='x2')
 
-        with pytest.raises(exceptions.IndexIntegrityError):
+        with pytest.raises(progexceptions.IndexIntegrityError):
             dataseries.Timeseries._verify_new_series(series=pseries)
 
     def test_verify_method_check_series_has_name(self, data_sequence,
@@ -334,7 +334,7 @@ class TestTimeseries:
 
         pseries = pandas.Series(data_sequence, index=index_period)
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             dataseries.Timeseries._verify_new_series(series=pseries)
 
     def test_verify_method_check_series_is_str(self, data_sequence,
@@ -343,7 +343,7 @@ class TestTimeseries:
         pseries = pandas.Series(data_sequence, index=index_period,
                                 name=tuple())
 
-        with pytest.raises(exceptions.SeriesIntegrityError):
+        with pytest.raises(progexceptions.SeriesIntegrityError):
             dataseries.Timeseries._verify_new_series(series=pseries)
 
     def test_has_strat_na_property(self, timeseries_periodindex):
@@ -368,10 +368,10 @@ class TestTimeseries:
                 assert ts.series.hasnans is False
 
     def test_stra_na_invalid_set_method(self, timeseries_periodindex):
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             timeseries_periodindex.strat_na = 'hey there'
 
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             timeseries_periodindex.strat_na = numpy.mean
 
     def test_strat_na_functions(self, data_sequence, index_period):
@@ -381,9 +381,9 @@ class TestTimeseries:
         dat[15] = None
 
         ts = dataseries.Timeseries(dat, index_period, series_name='x1')
-        ts.strat_na = functions.fillnan_aggregate(functions.agg_median())
+        ts.strat_na = progfunc.fillnan_aggregate(progfunc.agg_median())
 
-        fill_val = functions.agg_median()(dat)
+        fill_val = progfunc.agg_median()(dat)
 
         assert ts.series[10] == fill_val
         assert ts.series[15] == fill_val
@@ -392,7 +392,7 @@ class TestTimeseries:
         assert hasattr(timeseries_periodindex, 'strat_up')
 
     def test_strat_up_raise_on_wrong_method(self, timeseries_periodindex):
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             timeseries_periodindex.strat_up = 'hello'
 
     def test_strat_up_correct_methods(self, timeseries_periodindex):
@@ -403,25 +403,25 @@ class TestTimeseries:
         for a_method in methods + (None,):
             try:
                 ts.strat_up = a_method
-            except exceptions.ComputeMethodError:
+            except progexceptions.ComputeMethodError:
                 pytest.fail(f"method '{a_method}' does not work")
 
     def test_has_strat_down_property(self, timeseries_periodindex):
         assert hasattr(timeseries_periodindex, 'strat_down')
 
     def test_strat_down_raise_on_wrong_method(self, timeseries_periodindex):
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             timeseries_periodindex.strat_down = 'hello'
 
     def test_strat_down_correct_methods(self, timeseries_periodindex):
         ts = copy.deepcopy(timeseries_periodindex)
-        methods = (functions.sampledown_mean(), functions.sampledown_median(),
-                   functions.sampledown_max(), functions.sampledown_min())
+        methods = (progfunc.sampledown_mean(), progfunc.sampledown_median(),
+                   progfunc.sampledown_max(), progfunc.sampledown_min())
 
         for a_method in methods + (None,):
             try:
                 ts.strat_down = a_method
-            except exceptions.ComputeMethodError:
+            except progexceptions.ComputeMethodError:
                 pytest.fail(f"method '{a_method}' does not work")
 
     def test_has_transform_property(self, timeseries_periodindex):
@@ -454,13 +454,13 @@ class TestTimeseries:
         for a_method in methods:
             try:
                 ts.strat_inf = a_method
-            except exceptions.ComputeMethodError:
+            except progexceptions.ComputeMethodError:
                 pytest.fail(f"'{a_method}' did not get assigned")
 
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             ts.strat_inf = numpy.mean
 
-        with pytest.raises(exceptions.ComputeMethodError):
+        with pytest.raises(progexceptions.ComputeMethodError):
             ts.strat_inf = set([5, 6])
 
     def test_is_inf_method(self, data_sequence, index_period):
