@@ -363,3 +363,16 @@ def base_freq(freq):
         raise TypeError("Frequency not supported")
 
     return output
+
+
+# Type check decorators
+def dec_does_series_name_exist(func):
+    def check_if_series_exist(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except KeyError:
+            raise KeyError(f"'{kwargs['series_name']}' does not exist")
+
+    return check_if_series_exist
+
+# def dec_is_series_name_string(func):

@@ -1,7 +1,7 @@
 import unittest
 import progutils
 import functions
-import errors
+import exceptions
 import numpy
 import pandas
 
@@ -26,7 +26,7 @@ class TestTransformation(unittest.TestCase):
 
     def test_procedure_setter(self):
         tmp = self.new_trans_obj()
-        tmp.procedure = [functions.t_log1p()]
+        tmp.procedure = [functions.trans_log1p()]
 
         with self.assertRaises(TypeError):
             # Expecting a list, this should fail
@@ -37,7 +37,7 @@ class TestTransformation(unittest.TestCase):
             tmp.procedure = ['should be function']
 
         try:
-            tmp.procedure = [functions.t_log(), functions.t_sqrt()]
+            tmp.procedure = [functions.trans_log(), functions.trans_sqrt()]
         except TypeError:
             self.fail("adding list of functions failed")
 
@@ -45,12 +45,12 @@ class TestTransformation(unittest.TestCase):
         tmp = self.new_trans_obj()
         self.assertIsNone(tmp.plan)
 
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log())
 
         self.assertIsInstance(tmp.plan, str)
         self.assertTrue(tmp.plan.find('ln') != -1)
 
-        tmp.add(functions.t_reverse())
+        tmp.add(functions.trans_reverse())
         self.assertIsInstance(tmp.plan, str)
         self.assertTrue(tmp.plan.find('ln') != -1 and
                         tmp.plan.find('reverse') != -1 and
@@ -68,19 +68,19 @@ class TestTransformation(unittest.TestCase):
         with self.assertRaises(TypeError):
             tmp.add('hello')
 
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log())
 
         self.assertEqual(tmp.size, 1)
         self.assertTrue(callable(tmp.get(0)))
 
         # Check if values come out the same (the functions)
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_log()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_log()([10]))
 
-        tmp.add(functions.t_sqrt())
+        tmp.add(functions.trans_sqrt())
 
         self.assertEqual(tmp.size, 2)
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_log()([10]))
-        self.assertSequenceEqual(tmp.get(1)([10]), functions.t_sqrt()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_log()([10]))
+        self.assertSequenceEqual(tmp.get(1)([10]), functions.trans_sqrt()([10]))
 
     def test_drop_function(self):
         tmp = self.new_trans_obj()
@@ -93,7 +93,7 @@ class TestTransformation(unittest.TestCase):
             # Incorrect type, so should raise TypeError
             tmp.drop('1')
 
-        tmp.add(functions.t_log1p())
+        tmp.add(functions.trans_log1p())
 
         with self.assertRaises(IndexError):
             tmp.drop(1)
@@ -101,70 +101,70 @@ class TestTransformation(unittest.TestCase):
         tmp.drop(0)
         self.assertEqual(tmp.size, 0)
 
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
         tmp.drop(0)
 
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_sqrt()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_sqrt()([10]))
 
         tmp.drop(0)
         self.assertEqual(tmp.size, 0)
 
     def test_drop_first_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
 
         tmp.drop_first()
         self.assertEqual(tmp.size, 1)
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_sqrt()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_sqrt()([10]))
 
     def test_drop_last_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
+        tmp.add(functions.trans_log())
 
         tmp.drop_last()
         self.assertEqual(tmp.size, 2)
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_log1p()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_log1p()([10]))
 
     def test_insert_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
+        tmp.add(functions.trans_log())
 
-        tmp.insert_before(functions.t_log10(), 1)
+        tmp.insert_before(functions.trans_log10(), 1)
 
-        self.assertNotEqual(tmp.get(1)([10]), functions.t_sqrt()([10]))
-        self.assertSequenceEqual(tmp.get(2)([10]), functions.t_sqrt()([10]))
+        self.assertNotEqual(tmp.get(1)([10]), functions.trans_sqrt()([10]))
+        self.assertSequenceEqual(tmp.get(2)([10]), functions.trans_sqrt()([10]))
 
     def test_insert_first_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
+        tmp.add(functions.trans_log())
 
-        tmp.insert_first(functions.t_sqrt())
+        tmp.insert_first(functions.trans_sqrt())
 
-        self.assertNotEqual(tmp.get(0)([10]), functions.t_log1p()([10]))
-        self.assertSequenceEqual(tmp.get(0)([10]), functions.t_sqrt()([10]))
+        self.assertNotEqual(tmp.get(0)([10]), functions.trans_log1p()([10]))
+        self.assertSequenceEqual(tmp.get(0)([10]), functions.trans_sqrt()([10]))
 
     def test_insert_last_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_log1p())
-        tmp.add(functions.t_sqrt())
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_log1p())
+        tmp.add(functions.trans_sqrt())
+        tmp.add(functions.trans_log())
 
-        tmp.insert_last(functions.t_sqrt())
-        self.assertNotEqual(tmp.get(-1)([10]), functions.t_log()([10]))
-        self.assertSequenceEqual(tmp.get(-1)([10]), functions.t_sqrt()([10]))
+        tmp.insert_last(functions.trans_sqrt())
+        self.assertNotEqual(tmp.get(-1)([10]), functions.trans_log()([10]))
+        self.assertSequenceEqual(tmp.get(-1)([10]), functions.trans_sqrt()([10]))
 
     def test_clear_function(self):
         tmp = self.new_trans_obj()
-        tmp.add(functions.t_sqrt())
-        tmp.add(functions.t_log())
+        tmp.add(functions.trans_sqrt())
+        tmp.add(functions.trans_log())
 
         self.assertEqual(tmp.size, 2)
 
@@ -192,8 +192,8 @@ class TestTransformation(unittest.TestCase):
         self.assertTrue(pandas.Series.all(series_all_true))
 
         # Start creating some trans function
-        tranfunc1 = functions.t_log1p()
-        tranfunc2 = functions.t_sqrt()
+        tranfunc1 = functions.trans_log1p()
+        tranfunc2 = functions.trans_sqrt()
 
         tmp.add(tranfunc1)
 
@@ -271,7 +271,7 @@ class TestInstanceCheckers(unittest.TestCase):
         callable_sequence = progutils.callable_sequence
 
         # These should be True
-        self.assertTrue(callable_sequence([numpy.mean, functions.t_log()]))
+        self.assertTrue(callable_sequence([numpy.mean, functions.trans_log()]))
         self.assertTrue(callable_sequence((numpy.mean, numpy.sum)))
 
         # Should be False

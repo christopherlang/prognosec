@@ -1,3 +1,4 @@
+import collections
 import copy
 import pandas
 import numpy
@@ -13,6 +14,196 @@ UPSAMPLE_STR_INTER_METHODS = ('linear',)
 # Downsampling (using apply method) is far larger as it usually uses
 # Some aggregation function. Instead, we try catch strings instead
 DOWNSAMPLE_STR_METHODS = None
+
+
+class SeriesFrame:
+    def __init__(self, df=None, index=None, index_name=None):
+        df = copy.deepcopy(df)
+        split_df = self._split_dataframe(df)
+
+        findex = split_df['index'] if index is None else index
+
+        findexname = split_df['index'].name
+        findexname = findexname if index_name is None else index_name
+
+        if progutils.is_time_index(findex) is False:
+            msg = "'index' must be a time index"
+            raise exceptions.IndexIntegrityError(msg)
+
+        if isinstance(findexname, str) is False:
+            msg = "'index_name' must be string"
+            raise exceptions.IndexIntegrityError(msg)
+
+        self._frame = split_df['frame']
+
+        findex.name = findexname
+        self._index = findex
+        self._name_index = findexname
+
+    @property
+    def frame(self):
+        return self._frame
+
+    @property
+    def size(self):
+        return len(self._frame)
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    def index(self, index):
+        if progutils.is_time_index(index) is False:
+            msg = f"index type {type(index)} is not a datetime index"
+            raise exceptions.IndexIntegrityError(msg)
+
+        self._index = index
+
+    @property
+    def name_index(self):
+        return self._name_index
+
+    @name_index.setter
+    def name_index(self, index_name):
+        if isinstance(index_name, str) is False:
+            msg = "index_name must be a string"
+            raise exceptions.IndexIntegrityError(msg)
+
+        self._name_index = index_name
+
+    @property
+    def freq(self):
+        return self.index.freq
+
+    @property
+    def value_index(self):
+        return self.index.values
+
+    @property
+    def dtype_index(self):
+        return self.index.dtype
+
+    def _split_dataframe(self, dataframe):
+        timeseries = collections.OrderedDict()
+
+        for colname in dataframe.columns:
+            timeseries[colname] = Timeseries(dataframe[colname])
+
+        output = {'index': dataframe.index, 'frame': timeseries}
+
+        return output
+
+    def add(self, series, series_name=None):
+        if isinstance(series, Timeseries) is False:
+            msg = "'series' should be a 'Timeseries' instance"
+            raise exceptions.SeriesIntegrityError(msg)
+
+        if series_name is None:
+            series_name = series.name_series
+        else:
+            if isinstance(series_name, str) is False:
+                msg = "'series_name' must be a `str`"
+                raise exceptions.SeriesIntegrityError(msg)
+
+        if series_name in self._frame.keys():
+            msg = f"'{series_name}' already exists"
+            raise exceptions.SeriesIntegrityError(msg)
+
+        series.name_series = series_name
+
+        self._frame[series_name] = series
+
+    def remove(self, series_name):
+        if isinstance(series_name, str) is False:
+            msg = "'series_name' must be 'str'"
+            raise exceptions.SeriesIntegrityError(msg)
+
+        if series_name not in self._frame.keys():
+            raise KeyError(f"series named '{series_name}' does not exist")
+
+        del self._frame[series_name]
+
+    def drop(self, series_name):
+        return self.remove(series_name)
+
+    def replace(self, series, series_name=None):
+        if isinstance(series, Timeseries) is False:
+            raise exceptions.SeriesIntegrityError("series must be Timeseries")
+
+        if series_name is None:
+            series_name = series.name_series
+        else:
+            if isinstance(series_name, str) is False:
+                msg = "'series_name' must be a `str`"
+                raise exceptions.SeriesIntegrityError(msg)
+
+        series.name_series = series_name
+
+        self._frame[series_name] = series
+
+    @progutils.dec_does_series_name_exist
+    def access_series(self, series_name):
+        try:
+            output = self._frame[series_name]
+        except KeyError:
+            raise KeyError(f"Series '{series_name}' does not exist")
+
+        return output
+
+    def access_transform(self, series_name):
+        return self.access_series(series_name).transform
+
+    def access_strat_na(self, series_name):
+        return self.access_series(series_name).strat_na
+
+    def access_strat_up(self, series_name):
+        return self.access_series(series_name).strat_up
+
+    def access_strat_down(self, series_name):
+        return self.access_series(series_name).strat_down
+
+    def set_transform(self, series_name, transformation):
+        self.access_series(series_name).transform = transformation
+
+    def set_strat_na(self, series_name, strat_na):
+        self.access_series(series_name).strat_na = strat_na
+
+    def set_strat_up(self, series_name, strat_up):
+        self.access_series(series_name).strat_up = strat_up
+
+    def set_strat_down(self, series_name, strat_down):
+        self.access_series(series_name).strat_down = strat_down
+
+    def resample(self, freq, series_names=None, use_original=False):
+        if series_names is None:
+            stored_series = self.frame.values()
+        elif isinstance(series_names, str):
+            stored_series = [self.access_series(series_names)]
+        elif progutils.is_tuple_or_list(series_names):
+            stored_series = [self.access_series[i] for i in series_names]
+        else:
+            raise TypeError("'series_names' is not a 'str' or sequence")
+
+        resampled_series = list()
+        for a_ts in stored_series:
+            new_ts = a_ts.resample(freq, use_original=use_original)
+            resampled_series.append(new_ts)
+
+        fake_df = pandas.DataFrame.from_dict({'col1': [1, 2]})
+        fake_df.index = pandas.period_range('2019-01-01', periods=2,
+                                            name='date')
+
+        new_frame = SeriesFrame(fake_df)
+        new_frame.drop('col1')
+
+        for a_ts in resampled_series:
+            new_frame.add(a_ts)
+
+            if len(a_ts.index) > len(new_frame.index):
+                new_frame.index = a_ts.index
+
+        return new_frame
 
 
 class Timeseries:
@@ -40,7 +231,8 @@ class Timeseries:
     strat_up : str, UpsampleFunction
         Optional. Defaults to `'linear'`, or linear interpolation.
     strat_down : DownsampleFunction
-        Optional. Defaults to `functions.dsample_mean()`, or mean aggregation.
+        Optional. Defaults to `functions.sampledown_mean()`, or mean
+        aggregation.
     transform : Transformation
         Optional. Defaults to an empty `Transformation` instance (no transform)
 
@@ -168,7 +360,7 @@ class Timeseries:
         if isinstance(new_name, str) is False:
             raise exceptions.IndexIntegrityError("index name must be string")
 
-        self._series.name = new_name
+        self._series.index.name = new_name
 
     @property
     def name_series(self):
@@ -191,7 +383,7 @@ class Timeseries:
         if isinstance(new_name, str) is False:
             raise exceptions.SeriesIntegrityError("series name must be string")
 
-        self._series.index.name = new_name
+        self._series.name = new_name
 
     @property
     def freq(self):
@@ -406,11 +598,11 @@ class Timeseries:
         ----------
         method : DownsampleFunction
             Method for handling the dowsampling when resampling to new
-            frequency. If `None`, defaults to `functions.dsample_mean()`, or
+            frequency. If `None`, defaults to `functions.sampledown_mean()`, or
             or mean aggregation.
         """
         if method is None:
-            method = functions.dsample_mean()
+            method = functions.sampledown_mean()
 
         if callable(method):
             if isinstance(method, functions.DownsampleFunction) is False:

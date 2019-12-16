@@ -6,6 +6,9 @@
 # sublime workspace
 *sublime-workspace
 
+# Particular jupyter notebooks
+notebooks/Untitled*.ipynb
+
 # Data related text files
 data/**/*.md
 data/*.md

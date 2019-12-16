@@ -144,6 +144,8 @@ class TestTimeseries:
         except AttributeError:
             pytest.fail("Timeseries does not have 'name_series' setter")
 
+        assert ts.name_index == 'date'
+
     def test_name_index_property_must_be_string(self, index_period,
                                                 data_sequence, series_name):
 
@@ -180,6 +182,8 @@ class TestTimeseries:
             ts.name_series = 'x2'
         except AttributeError:
             pytest.fail("Timeseries does not have 'name_series' setter")
+
+        assert ts.name_series == 'x2'
 
     def test_name_series_setter_type_check(self, timeseries_periodindex):
         ts = copy.deepcopy(timeseries_periodindex)
@@ -377,7 +381,7 @@ class TestTimeseries:
         dat[15] = None
 
         ts = dataseries.Timeseries(dat, index_period, series_name='x1')
-        ts.strat_na = functions.fnan_aggregate(functions.agg_median())
+        ts.strat_na = functions.fillnan_aggregate(functions.agg_median())
 
         fill_val = functions.agg_median()(dat)
 
@@ -411,8 +415,8 @@ class TestTimeseries:
 
     def test_strat_down_correct_methods(self, timeseries_periodindex):
         ts = copy.deepcopy(timeseries_periodindex)
-        methods = (functions.dsample_mean(), functions.dsample_median(),
-                   functions.dsample_max(), functions.dsample_min())
+        methods = (functions.sampledown_mean(), functions.sampledown_median(),
+                   functions.sampledown_max(), functions.sampledown_min())
 
         for a_method in methods + (None,):
             try:
