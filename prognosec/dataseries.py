@@ -19,197 +19,6 @@ UPSAMPLE_STR_INTER_METHODS = ('linear',)
 DOWNSAMPLE_STR_METHODS = None
 
 
-class SeriesFrame:
-    def __init__(self, df=None, index=None, index_name=None):
-        df = copy.deepcopy(df)
-        split_df = self._split_dataframe(df)
-
-        findex = split_df['index'] if index is None else index
-
-        findexname = split_df['index'].name
-        findexname = findexname if index_name is None else index_name
-
-        if progutils.is_time_index(findex) is False:
-            msg = "'index' must be a time index"
-            raise progexceptions.IndexIntegrityError(msg)
-
-        if isinstance(findexname, str) is False:
-            msg = "'index_name' must be string"
-            raise progexceptions.IndexIntegrityError(msg)
-
-        self._frame = split_df['frame']
-
-        findex.name = findexname
-        self._index = findex
-        self._name_index = findexname
-
-    @property
-    def frame(self):
-        return self._frame
-
-    @property
-    def size(self):
-        return len(self._frame)
-
-    @property
-    def index(self):
-        return self._index
-
-    @index.setter
-    def index(self, index):
-        if progutils.is_time_index(index) is False:
-            msg = f"index type {type(index)} is not a datetime index"
-            raise progexceptions.IndexIntegrityError(msg)
-
-        self._index = index
-
-    @property
-    def name_index(self):
-        return self._name_index
-
-    @name_index.setter
-    def name_index(self, index_name):
-        if isinstance(index_name, str) is False:
-            msg = "index_name must be a string"
-            raise progexceptions.IndexIntegrityError(msg)
-
-        self._name_index = index_name
-
-    @property
-    def freq(self):
-        return self.index.freq
-
-    @property
-    def value_index(self):
-        return self.index.values
-
-    @property
-    def dtype_index(self):
-        return self.index.dtype
-
-    def _split_dataframe(self, dataframe):
-        timeseries = collections.OrderedDict()
-
-        for colname in dataframe.columns:
-            timeseries[colname] = Timeseries(dataframe[colname])
-
-        output = {'index': dataframe.index, 'frame': timeseries}
-
-        return output
-
-    def add(self, series, series_name=None):
-        if isinstance(series, Timeseries) is False:
-            msg = "'series' should be a 'Timeseries' instance"
-            raise progexceptions.SeriesIntegrityError(msg)
-
-        if series_name is None:
-            series_name = series.name_series
-        else:
-            if isinstance(series_name, str) is False:
-                msg = "'series_name' must be a `str`"
-                raise progexceptions.SeriesIntegrityError(msg)
-
-        if series_name in self._frame.keys():
-            msg = f"'{series_name}' already exists"
-            raise progexceptions.SeriesIntegrityError(msg)
-
-        series.name_series = series_name
-
-        self._frame[series_name] = series
-
-    def remove(self, series_name):
-        if isinstance(series_name, str) is False:
-            msg = "'series_name' must be 'str'"
-            raise progexceptions.SeriesIntegrityError(msg)
-
-        if series_name not in self._frame.keys():
-            raise KeyError(f"series named '{series_name}' does not exist")
-
-        del self._frame[series_name]
-
-    def drop(self, series_name):
-        return self.remove(series_name)
-
-    def replace(self, series, series_name=None):
-        if isinstance(series, Timeseries) is False:
-            msg = "series must be Timeseries"
-            raise progexceptions.SeriesIntegrityError(msg)
-
-        if series_name is None:
-            series_name = series.name_series
-        else:
-            if isinstance(series_name, str) is False:
-                msg = "'series_name' must be a `str`"
-                raise progexceptions.SeriesIntegrityError(msg)
-
-        series.name_series = series_name
-
-        self._frame[series_name] = series
-
-    @progutils.dec_does_series_name_exist
-    def access_series(self, series_name):
-        try:
-            output = self._frame[series_name]
-        except KeyError:
-            raise KeyError(f"Series '{series_name}' does not exist")
-
-        return output
-
-    def access_transform(self, series_name):
-        return self.access_series(series_name).transform
-
-    def access_strat_na(self, series_name):
-        return self.access_series(series_name).strat_na
-
-    def access_strat_up(self, series_name):
-        return self.access_series(series_name).strat_up
-
-    def access_strat_down(self, series_name):
-        return self.access_series(series_name).strat_down
-
-    def set_transform(self, series_name, transformation):
-        self.access_series(series_name).transform = transformation
-
-    def set_strat_na(self, series_name, strat_na):
-        self.access_series(series_name).strat_na = strat_na
-
-    def set_strat_up(self, series_name, strat_up):
-        self.access_series(series_name).strat_up = strat_up
-
-    def set_strat_down(self, series_name, strat_down):
-        self.access_series(series_name).strat_down = strat_down
-
-    def resample(self, freq, series_names=None, use_original=False):
-        if series_names is None:
-            stored_series = self.frame.values()
-        elif isinstance(series_names, str):
-            stored_series = [self.access_series(series_names)]
-        elif progutils.is_tuple_or_list(series_names):
-            stored_series = [self.access_series[i] for i in series_names]
-        else:
-            raise TypeError("'series_names' is not a 'str' or sequence")
-
-        resampled_series = list()
-        for a_ts in stored_series:
-            new_ts = a_ts.resample(freq, use_original=use_original)
-            resampled_series.append(new_ts)
-
-        fake_df = pandas.DataFrame.from_dict({'col1': [1, 2]})
-        fake_df.index = pandas.period_range('2019-01-01', periods=2,
-                                            name='date')
-
-        new_frame = SeriesFrame(fake_df)
-        new_frame.drop('col1')
-
-        for a_ts in resampled_series:
-            new_frame.add(a_ts)
-
-            if len(a_ts.index) > len(new_frame.index):
-                new_frame.index = a_ts.index
-
-        return new_frame
-
-
 class Timeseries:
     """Time series array wrapper
 
@@ -268,17 +77,14 @@ class Timeseries:
         Object hosting the ordered sequence of array transformation. Direct
         access to this object enables the editing of the sequence
     """
-
+    @progutils.typecheck_datetime_like('index')
+    @progutils.typecheck(series_name=str, index_name=str)
     def __init__(self, series, index=None, series_name=None, index_name=None,
                  strat_na=None, strat_inf=None, strat_up=None, strat_down=None,
                  transform=None):
         if isinstance(series, pandas.Series) is not True:
             if index is None:
                 errmsg = "Index must be provided for non-pandas.Series"
-                raise progexceptions.IndexTypeError(errmsg)
-            elif progutils.is_time_index(index) is not True:
-                errmsg = f"'index' parameter must be of type 'DatetimeIndex', "
-                errmsg += "'PeriodIndex', or 'TimedeltaIndex'"
                 raise progexceptions.IndexTypeError(errmsg)
 
             prepped_series = pandas.Series(series, index=index)
@@ -287,18 +93,10 @@ class Timeseries:
 
         # At this point `prepped_series` should be a `pandas.Series`
         if series_name is not None:
-            try:
-                prepped_series.name = series_name
-            except TypeError as e:
-                msg = ". ".join(e.args)
-                raise progexceptions.SeriesIntegrityError(msg)
+            prepped_series.name = series_name
 
         if index_name is not None:
-            try:
-                prepped_series.index.name = index_name
-            except TypeError as e:
-                msg = ". ".join(e.args)
-                raise progexceptions.IndexIntegrityError(msg)
+            prepped_series.index.name = index_name
 
         self._verify_new_series(prepped_series)
 
@@ -354,6 +152,7 @@ class Timeseries:
         return self._series.index.name
 
     @name_index.setter
+    @progutils.typecheck(new_name=str)
     def name_index(self, new_name):
         """Set a new name for the index of the time series
 
@@ -361,10 +160,6 @@ class Timeseries:
         ----------
         new_name : str
         """
-        if isinstance(new_name, str) is False:
-            msg = "index name must be string"
-            raise progexceptions.IndexIntegrityError(msg)
-
         self._series.index.name = new_name
 
     @property
@@ -378,6 +173,7 @@ class Timeseries:
         return self._series.name
 
     @name_series.setter
+    @progutils.typecheck(new_name=str)
     def name_series(self, new_name):
         """Set a new name for the time series
 
@@ -385,10 +181,6 @@ class Timeseries:
         ----------
         new_name : str
         """
-        if isinstance(new_name, str) is False:
-            msg = "series name must be string"
-            raise progexceptions.SeriesIntegrityError(msg)
-
         self._series.name = new_name
 
     @property
@@ -637,6 +429,7 @@ class Timeseries:
         return self._transform
 
     @transform.setter
+    @progutils.typecheck(transform=(progutils.Transformation, type(None)))
     def transform(self, transform):
         """Set a new transformation instance
 
@@ -648,8 +441,6 @@ class Timeseries:
         """
         if transform is None:
             transform = progutils.Transformation()
-        elif isinstance(transform, progutils.Transformation) is False:
-            raise TypeError("Not a `Transformation` instance")
 
         self._transform = transform
 
@@ -779,6 +570,7 @@ class Timeseries:
         """
         return self.is_na(after_clean=after_clean).sum()
 
+    @progutils.typecheck(after_clean=bool)
     def is_na(self, after_clean=True):
         """Retrieve a boolean series that locates missing values
 
@@ -821,6 +613,7 @@ class Timeseries:
         """
         return self.is_inf(after_clean=after_clean).sum()
 
+    @progutils.typecheck(after_clean=bool)
     def is_inf(self, after_clean=True):
         """Retrieve a boolean series that locates infinities
 
@@ -846,7 +639,7 @@ class Timeseries:
 
         Parameters
         ----------
-        dtype : str, numpy.dtype
+        dtype : str, numpy.dtype, type
 
         Returns
         -------
@@ -871,6 +664,7 @@ class Timeseries:
         """
         return copy.deepcopy(self)
 
+    @progutils.typecheck(to_freq=(pandas.DateOffset, str), use_original=bool)
     def resample(self, to_freq, use_original=False):
         """Resamples, or group by, values by index
 
@@ -938,3 +732,167 @@ class Timeseries:
                           strat_up=self.strat_up,
                           strat_down=self.strat_down,
                           transform=self.transform)
+
+
+class SeriesFrame:
+
+    @progutils.typecheck_datetime_like(param_name='index')
+    @progutils.typecheck(df=pandas.DataFrame, index_name=str)
+    def __init__(self, df=None, index=None, index_name=None):
+        df = copy.deepcopy(df)
+        split_df = self._split_dataframe(df)
+
+        findex = split_df['index'] if index is None else index
+
+        findexname = split_df['index'].name
+        findexname = findexname if index_name is None else index_name
+
+        self._frame = split_df['frame']
+
+        findex.name = findexname
+        self._index = findex
+        self._name_index = findexname
+
+    @property
+    def frame(self):
+        return self._frame
+
+    @property
+    def size(self):
+        return len(self._frame)
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    @progutils.typecheck_datetime_like(param_name='index')
+    def index(self, index):
+        self._index = index
+
+    @property
+    def name_index(self):
+        return self._name_index
+
+    @name_index.setter
+    @progutils.typecheck(index_name=str)
+    def name_index(self, index_name):
+        self._name_index = index_name
+
+    @property
+    def freq(self):
+        return self.index.freq
+
+    @property
+    def value_index(self):
+        return self.index.values
+
+    @property
+    def dtype_index(self):
+        return self.index.dtype
+
+    def _split_dataframe(self, dataframe):
+        timeseries = collections.OrderedDict()
+
+        for colname in dataframe.columns:
+            timeseries[colname] = Timeseries(dataframe[colname])
+
+        output = {'index': dataframe.index, 'frame': timeseries}
+
+        return output
+
+    @progutils.typecheck(series=Timeseries, series_name=str)
+    def add(self, series, series_name=None):
+        if series_name is None:
+            series_name = series.name_series
+
+        if series_name in self._frame.keys():
+            msg = f"'{series_name}' already exists"
+            raise progexceptions.SeriesIntegrityError(msg)
+
+        series.name_series = series_name
+        self._frame[series_name] = series
+
+    @progutils.typecheck(series_name=str)
+    def remove(self, series_name):
+        if series_name not in self._frame.keys():
+            raise KeyError(f"series named '{series_name}' does not exist")
+
+        del self._frame[series_name]
+
+    @progutils.typecheck(series_name=str)
+    def drop(self, series_name):
+        return self.remove(series_name)
+
+    @progutils.typecheck(series=Timeseries, series_name=str)
+    def replace(self, series, series_name=None):
+        if series_name is None:
+            series_name = series.name_series
+
+        series.name_series = series_name
+        self._frame[series_name] = series
+
+    @progutils.dec_does_series_name_exist
+    def access_series(self, series_name):
+        try:
+            output = self._frame[series_name]
+        except KeyError:
+            raise KeyError(f"Series '{series_name}' does not exist")
+
+        return output
+
+    def access_transform(self, series_name):
+        return self.access_series(series_name).transform
+
+    def access_strat_na(self, series_name):
+        return self.access_series(series_name).strat_na
+
+    def access_strat_up(self, series_name):
+        return self.access_series(series_name).strat_up
+
+    def access_strat_down(self, series_name):
+        return self.access_series(series_name).strat_down
+
+    def set_transform(self, series_name, transformation):
+        self.access_series(series_name).transform = transformation
+
+    def set_strat_na(self, series_name, strat_na):
+        self.access_series(series_name).strat_na = strat_na
+
+    def set_strat_up(self, series_name, strat_up):
+        self.access_series(series_name).strat_up = strat_up
+
+    def set_strat_down(self, series_name, strat_down):
+        self.access_series(series_name).strat_down = strat_down
+
+    @progutils.typecheck(series_name=(str, list, tuple), use_original=bool)
+    def resample(self, freq, series_names=None, use_original=False):
+        if series_names is None:
+            stored_series = self.frame.values()
+        elif isinstance(series_names, str):
+            stored_series = [self.access_series(series_names)]
+        elif progutils.is_tuple_or_list(series_names):
+            stored_series = [self.access_series[i] for i in series_names]
+
+        resampled_series = list()
+        for a_ts in stored_series:
+            new_ts = a_ts.resample(freq, use_original=use_original)
+            resampled_series.append(new_ts)
+
+        fake_df = pandas.DataFrame.from_dict({'col1': [1, 2]})
+        fake_df.index = pandas.period_range('2019-01-01', periods=2,
+                                            name='date')
+
+        new_frame = SeriesFrame(fake_df)
+        new_frame.drop('col1')
+
+        for a_ts in resampled_series:
+            new_frame.add(a_ts)
+
+            if len(a_ts.index) > len(new_frame.index):
+                new_frame.index = a_ts.index
+
+        return new_frame
+
+    def copy(self):
+        return copy.deepcopy(self)

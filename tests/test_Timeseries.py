@@ -112,7 +112,7 @@ class TestTimeseries:
         # Index must be of DatetimeIndex, PeriodIndex, TimedeltaIndex
         series = list(data_sequence)
 
-        with pytest.raises(progexceptions.IndexTypeError):
+        with pytest.raises(TypeError):
             dataseries.Timeseries(series=series, index=range(num_records))
 
     def test_nonpandas_series_raise_on_no_index(self, data_sequence):
@@ -152,10 +152,12 @@ class TestTimeseries:
         index_period = copy.deepcopy(index_period)
         index_period.name = None
         with pytest.raises(progexceptions.IndexIntegrityError):
+            # Because index is unnamed
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=series_name)
 
-        with pytest.raises(progexceptions.IndexIntegrityError):
+        with pytest.raises(TypeError):
+            # Because the provided index name is not a string
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=series_name,
                                   index_name=tuple([1, 2]))
@@ -188,16 +190,16 @@ class TestTimeseries:
     def test_name_series_setter_type_check(self, timeseries_periodindex):
         ts = copy.deepcopy(timeseries_periodindex)
 
-        with pytest.raises(progexceptions.SeriesIntegrityError):
+        with pytest.raises(TypeError):
             ts.name_series = 600
 
     def test_name_series_property_must_be_string(self, index_period,
                                                  data_sequence):
-        with pytest.raises(progexceptions.SeriesIntegrityError):
+        with pytest.raises(TypeError):
             dataseries.Timeseries(data_sequence, index=index_period,
                                   series_name=tuple([3, 4]))
 
-        with pytest.raises(progexceptions.SeriesIntegrityError):
+        with pytest.raises(TypeError):
             # pandas raises TypeError if setting of series name uses unhashable
             # types. Capture this and re-raise
             dataseries.Timeseries(data_sequence, index=index_period,
@@ -475,3 +477,7 @@ class TestTimeseries:
         assert not ts.is_inf(after_clean=True).any()
         assert ts.size_inf(after_clean=False) == 2
         assert ts.size_inf(after_clean=True) == 0
+
+    def test_transform_property_set_type_check(self, timeseries_periodindex):
+        with pytest.raises(TypeError):
+            timeseries_periodindex.transform = 500
