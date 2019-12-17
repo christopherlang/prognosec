@@ -2,9 +2,6 @@ import collections
 import copy
 import pandas
 import numpy
-# import functions
-# import progutils
-# import exceptions
 from progutils import progfunc
 from progutils import progutils
 from progutils import progexceptions
@@ -735,6 +732,42 @@ class Timeseries:
 
 
 class SeriesFrame:
+    """Collection of Timeseries
+
+    Stores a collection of `Timeseries` instances and is similar to a
+    `pandas.DataFrame` (collection of `pandas.Series`), but stores any
+    `Timeseries` object, regardless of its size. Therefore it is similar to a
+    jagged `DataFrame`.
+
+    The focus is however to allow for simplifer modification to the underlying
+    data. For example, even if each `Timeseries` may have different
+    datetime-like index at different frequency, the `resample` method or
+    `get_dataframe` would still work without much user work, as each
+    `Timeseries` object will handle the resampling, and `SeriesFrame` simply
+    oversees the operation.
+
+    Attributes
+    ----------
+    frame : collections.OrderedDict
+    size : int
+    index : datetime-like `pandas` index
+    name_index : str
+    freq : pandas.DateOffset
+    value_index : numpy.ndarray[Timestamp]
+    dtype_index : numpy.dtype
+
+    Parameters
+    ----------
+    df : pandas.DataFrame, Optional
+        A `pandas.DataFrame` object. The columns are split into separate
+        `Timeseries` objects and stored
+    index : datatime-like `pandas` index, Optional
+        It is required if `df` does not have a datatime-like index. Otherwise,
+        it overwrites `df` index
+    index_name : str, Optional
+        It is required if `df` does not have a index name. Otherwise, it
+        overwrites `df` index name
+    """
 
     @progutils.typecheck_datetime_like(param_name='index')
     @progutils.typecheck(df=pandas.DataFrame, index_name=str)
@@ -755,14 +788,32 @@ class SeriesFrame:
 
     @property
     def frame(self):
+        """Collection of `Timeseries` object
+
+        Returns
+        -------
+        collections.OrderedDict
+        """
         return self._frame
 
     @property
     def size(self):
+        """Number of `Timeseries` objects
+
+        Returns
+        -------
+        int
+        """
         return len(self._frame)
 
     @property
     def index(self):
+        """Primary datetime-like index of the frame
+
+        Returns
+        -------
+        datetime-like index
+        """
         return self._index
 
     @index.setter
@@ -772,6 +823,12 @@ class SeriesFrame:
 
     @property
     def name_index(self):
+        """Name of the primary index
+
+        Returns
+        -------
+        str
+        """
         return self._name_index
 
     @name_index.setter
@@ -781,14 +838,32 @@ class SeriesFrame:
 
     @property
     def freq(self):
+        """Frequency of the primary index
+
+        Returns
+        -------
+        pandas.DateOffset
+        """
         return self.index.freq
 
     @property
     def value_index(self):
+        """Value of the datetime-like index
+
+        Returns
+        -------
+        numpy.ndarray[Timestamp]
+        """
         return self.index.values
 
     @property
     def dtype_index(self):
+        """Datetype of the datetime-like index
+
+        Returns
+        -------
+        numpy.dtype
+        """
         return self.index.dtype
 
     def _split_dataframe(self, dataframe):
@@ -803,6 +878,16 @@ class SeriesFrame:
 
     @progutils.typecheck(series=Timeseries, series_name=str)
     def add(self, series, series_name=None):
+        """Add a new Timeseries object
+
+        Parameters
+        ----------
+        series : Timeseries
+        series_name : str, optional
+            Name of the series. This sets both `frame` property dictionary as
+            well as the series name in `Timeseries`. If `None`, the series name
+            is extracted from the provided `Timeseries` instance
+        """
         if series_name is None:
             series_name = series.name_series
 
@@ -815,6 +900,18 @@ class SeriesFrame:
 
     @progutils.typecheck(series_name=str)
     def remove(self, series_name):
+        """Delete a Timeseries
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to remove
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         if series_name not in self._frame.keys():
             raise KeyError(f"series named '{series_name}' does not exist")
 
@@ -822,10 +919,24 @@ class SeriesFrame:
 
     @progutils.typecheck(series_name=str)
     def drop(self, series_name):
+        """Alias for `remove` method"""
         return self.remove(series_name)
 
     @progutils.typecheck(series=Timeseries, series_name=str)
     def replace(self, series, series_name=None):
+        """Replace an existing Timeseries
+
+        Parameters
+        ----------
+        series : Timeseries
+        series_name : str
+            Name of the series to be replaced
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         if series_name is None:
             series_name = series.name_series
 
@@ -834,6 +945,26 @@ class SeriesFrame:
 
     @progutils.dec_does_series_name_exist
     def access_series(self, series_name):
+        """Get direct access to a Timeseries
+
+        Obviously this doesn't encapsulates the data from outside access, but
+        the design goal to simplified data frame. `Timeseries` instances are
+        designed for clean, direct modification of the underlying data.
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+
+        Returns
+        -------
+        Timeseries
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         try:
             output = self._frame[series_name]
         except KeyError:
@@ -842,31 +973,177 @@ class SeriesFrame:
         return output
 
     def access_transform(self, series_name):
+        """Get direct access to a Timeseries' Transformation instance
+
+        This'll enable you to modify (e.g. add, delete) transformation functions
+        for that particular `Timeseries` instance.
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+
+        Returns
+        -------
+        Transformation
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         return self.access_series(series_name).transform
 
     def access_strat_na(self, series_name):
+        """Get direct access to a Timeseries' NaN handling property
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+
+        Returns
+        -------
+        str, scalar, dict, MissingValueFillFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         return self.access_series(series_name).strat_na
 
     def access_strat_up(self, series_name):
+        """Get direct access to a Timeseries' upsampling strategy
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+
+        Returns
+        -------
+        str, UpsampleFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         return self.access_series(series_name).strat_up
 
     def access_strat_down(self, series_name):
+        """Get direct access to a Timeseries' downsampling strategy
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+
+        Returns
+        -------
+        DownsampleFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         return self.access_series(series_name).strat_down
 
     def set_transform(self, series_name, transformation):
+        """Set a new Transformation instance for a Timeseries
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+        transformation : Transformation
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         self.access_series(series_name).transform = transformation
 
     def set_strat_na(self, series_name, strat_na):
+        """Set a new NaN handling strategy for a Timeseries
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+        stra_na : str, scalar, dict, MissingValueFillFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         self.access_series(series_name).strat_na = strat_na
 
     def set_strat_up(self, series_name, strat_up):
+        """Set a new upsampling method for a Timeseries
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+        stra_na : str, UpsampleFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         self.access_series(series_name).strat_up = strat_up
 
     def set_strat_down(self, series_name, strat_down):
+        """Set a new downsampling method for a Timeseries
+
+        Parameters
+        ----------
+        series_name : str
+            Name of the series to get access to
+        stra_na : DownsampleFunction
+
+        Raises
+        ------
+        KeyError
+            Will be raised if `series_name` value is not found in the frame
+        """
         self.access_series(series_name).strat_down = strat_down
 
     @progutils.typecheck(series_name=(str, list, tuple), use_original=bool)
     def resample(self, freq, series_names=None, use_original=False):
+        """Resampling SeriesFrame to a new frequency
+
+        Each stored `Timeseries` is resampled to `freq` by utilizing their
+        respective up/downsampling method.
+
+        Parameter `use_original` enables/disable all `NaN` handling and
+        transformation.
+
+        Parameters
+        ----------
+        freq : pandas.DateOffset, str
+            Target frequency
+        series_name : str, optional
+            Name(s) of the series to perform the resampling on. If `None`, then
+            all `Timeseries` are resampled
+        use_original : bool, optional
+            If `False`, than each `Timeseries` instance will perform their
+            respective `NaN` handling and transformations. Otherwise it those
+            modifications will not be applied before resampling
+
+        Raises
+        ------
+        Various
+            Particularly if `resample` has failed for one or more `Timeseries`
+            such as the target frequency is not compatible, or that the data
+            type fails with either up/downsampling.
+        """
         if series_names is None:
             stored_series = self.frame.values()
         elif isinstance(series_names, str):
@@ -895,4 +1172,5 @@ class SeriesFrame:
         return new_frame
 
     def copy(self):
+        """Retrieve a deep copy of the SeriesFrame instance"""
         return copy.deepcopy(self)
