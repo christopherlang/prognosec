@@ -1,6 +1,7 @@
 # import json
-# import datetime
-# import functools
+import datetime
+import functools
+import re
 # import collections
 # import os
 # import sys
@@ -9,6 +10,9 @@
 from typing import Sequence
 import collections
 from progutils import progutils
+
+BRACKETREGEX = re.compile(r"\[[a-zA-Z0-9,\|\[\]]+\]", flags=re.I)
+WHITESPACEREGEX = re.compile(r"\s+")
 
 
 class MetaTemplate:
@@ -173,3 +177,75 @@ class MetaTableTemplate(MetaTemplate):
                               default=default_value)
 
         self.frozen = True
+
+
+def parse_typespec(value, typespec):
+    typespec = typespec.replace(' ', '').lower()
+
+    if typespec.find('[') == -1:  # Did NOT find another left bracket
+        value = typeconverts(typespec)(value)
+    else:
+        data_struct, typespec = typespec.split("[", 1)
+        typespec = typespec[:-1]  # Remove right bracket (assoc. above)
+
+        if data_struct in ['set', 'tuple', 'list']:
+
+            value = [parse_typespec(i, typespec) for i in value]
+            value = typeconverts(data_struct)(value)
+
+        elif data_struct == 'dict':
+
+            keyspec, valuespec = typespec.split(",", 1)
+            key_converter = typeconverts(keyspec)
+
+            if valuespec.find('[') == -1:
+                value = {key_converter(k): typeconverts(valuespec)(v)
+                         for k, v in value.items()}
+            else:
+                value = {key_converter(k): parse_typespec(v, valuespec)
+                         for k, v in value.items()}
+
+        else:
+            raise TypeError(f"'{data_struct}' not supported")
+
+    return value
+
+
+def isostr2dt(isostring, hastime=True, hasmicro=True):
+    iso_format = "%Y-%m-%d"
+
+    if isostring.endswith('Z'):
+        isostring = isostring.replace('Z', '')
+
+    if hastime is True:
+        iso_format += "T%H:%M:%S"
+
+    if hasmicro is True:
+        iso_format += ".%f"
+    else:
+        isostring = isostring.partition(".")[0]
+
+    output = datetime.datetime.strptime(isostring, iso_format)
+
+    return output
+
+
+def typeconverts(typespec):
+    typers = {
+        "str": str,
+        "float": float,
+        "int": int,
+        'bool': bool,
+        "ISO8601|DATETSZ": functools.partial(isostr2dt, hastime=True,
+                                             hasmicro=False),
+        "ISO8601|DATETMZ": functools.partial(isostr2dt, hastime=True,
+                                             hasmicro=False),
+        "ISO8601|DATE___": functools.partial(isostr2dt, hastime=False,
+                                             hasmicro=False),
+        "tuple": tuple,
+        "list": list,
+        "set": set,
+        'dict': dict,
+    }
+
+    return typers[typespec]
