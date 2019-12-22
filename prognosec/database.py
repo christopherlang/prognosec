@@ -1,4 +1,4 @@
-# import json
+import json
 import datetime
 import functools
 import re
@@ -11,9 +11,8 @@ from typing import Sequence
 import collections
 from progutils import progutils
 
-BRACKETREGEX = re.compile(r"\[[a-zA-Z0-9,\|\[\]]+\]", flags=re.I)
-WHITESPACEREGEX = re.compile(r"\s+")
 
+# class DatabaseManager:
 
 class MetaTemplate:
     """Meta file template
@@ -144,12 +143,13 @@ class MetaDatabaseTemplate(MetaTemplate):
         'name': ("str", True, None),
         'tables': ("tuple[str]", True, None),
         'collections': ("tuple[str]", True, None),
-        'created': ("ISO8601|DATETSZ", True, None),
-        'last_modified': ("ISO8601|DATETSZ", True, None),
+        'created': ("datetime_second", True, None),
+        'last_modified': ("datetime_second", True, None),
         'total_table_records': ("int", True, None),
         'total_documents': ("int", True, None),
         'database_directory': ("str", True, None),
-        'root_directory': ("str", True, None),
+        'database_root_directory': ("str", True, None),
+        'database_meta_location': ('str', True, None),
         'table_meta_locations': ("dict[str, str]", True, None),
         'collection_meta_locations': ("dict[str, str]", True, None)
     }
@@ -174,8 +174,8 @@ class MetaDatabaseTemplate(MetaTemplate):
 class MetaTableTemplate(MetaTemplate):
     template_keys = {
         'name': ("str", True, None),
-        'created': ("ISO8601|DATETSZ", True, None),
-        'last_modified': ("ISO8601|DATETSZ", True, None),
+        'created': ("datetime_second", True, None),
+        'last_modified': ("datetime_second", True, None),
         'columns': ("tuple[str]", True, None),
         'datatypes': ("tuple[dtypes]", True, None),
         'keys': ("tuple[str]", True, None),
@@ -218,7 +218,7 @@ class Meta:
 
     @property
     def metadata(self):
-        if all(self._keys_edited.values()) is False:
+        if self.is_valid is False:
             raise KeyError("Not all required keys has been filled")
 
         return self._metadata
@@ -226,6 +226,10 @@ class Meta:
     @property
     def template(self):
         return self._template
+
+    @property
+    def is_valid(self):
+        return all(self._keys_edited.values())
 
     def replace(self, key, value):
         if key not in self._metadata.keys():
@@ -280,11 +284,40 @@ class Meta:
 
 
 def init_database(rootdir, dbdir_name='database'):
+    rootdir = os.path.abspath(rootdir)
     dbdir_path = os.path.join(rootdir, dbdir_name)
+
+    if os.path.exists(rootdir) is False:
+        raise FileNotFoundError(f"Directory '{rootdir}' does not exist")
+
+    if os.path.exists(dbdir_path) is True:
+        msg = f"Database directory '{dbdir_path}' already exists"
+        raise FileExistsError(msg)
+
     os.mkdir(dbdir_path)
+    os.mkdir(os.path.join(dbdir_path, 'stores'))
 
     # Generate a new Meta object
-    # Meta
+    dbmeta = Meta(template=MetaDatabaseTemplate())
+    nowtime = utcnow_iso()
+    dbmeta.edit('name', dbdir_name)
+    dbmeta.edit('tables', tuple())
+    dbmeta.edit('collections', tuple())
+    dbmeta.edit('created', nowtime)
+    dbmeta.edit('last_modified', nowtime)
+    dbmeta.edit('total_table_records', 0)
+    dbmeta.edit('total_documents', 0)
+    dbmeta.edit('database_directory', dbdir_path)
+    dbmeta.edit('database_root_directory', rootdir)
+    dbmeta.edit('table_meta_locations', dict())
+    dbmeta.edit('collection_meta_locations', dict())
+
+    dbmeta_file_loc = os.path.join(dbdir_path, 'database_meta.json')
+    dbmeta.edit('database_meta_location', dbmeta_file_loc)
+    with open(dbmeta_file_loc, 'w', encoding='utf-8') as f:
+        json.dump(dbmeta.metadata, f, indent=0, ensure_ascii=False)
+
+    return dbmeta.metadata
 
 
 def parse_typerule(value, typerule):
@@ -324,7 +357,19 @@ def conforms_to_typerule(value, typerule):
 
     def check_if_value_conforms(value, typerule):
         if typerule.find('[') == -1:
-            is_of_type = isinstance(value, typeconverts(typerule))
+
+            if typerule == 'date':
+                is_of_type = is_datetime_valid(value, hastime=False,
+                                               hasmicro=False)
+            elif typerule == 'datetime_second':
+                is_of_type = is_datetime_valid(value, hastime=True,
+                                               hasmicro=False)
+            elif typerule == 'datetime_microsecond':
+                is_of_type = is_datetime_valid(value, hastime=True,
+                                               hasmicro=True)
+            else:
+                is_of_type = isinstance(value, typeconverts(typerule))
+
         else:
             data_struct, typerule = typerule.split("[", 1)
             typerule = typerule[:-1]  # Remove right bracket (assoc. above)
@@ -375,6 +420,25 @@ def isostr2dt(isostring, hastime=True, hasmicro=True):
 
     output = datetime.datetime.strptime(isostring, iso_format)
 
+    if hastime is False:
+        output = output.date()
+
+    return output
+
+
+def is_datetime_valid(isostring, hastime=True, hasmicro=True):
+    try:
+        isostr2dt(isostring=isostring, hastime=hastime, hasmicro=hasmicro)
+        output = True
+    except ValueError:
+        output = False
+
+    return output
+
+
+def utcnow_iso():
+    output = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+    output += 'Z'
     return output
 
 
@@ -384,12 +448,12 @@ def typeconverts(typespec):
         "float": float,
         "int": int,
         'bool': bool,
-        "ISO8601|DATETSZ": functools.partial(isostr2dt, hastime=True,
+        "datetime_second": functools.partial(isostr2dt, hastime=True,
                                              hasmicro=False),
-        "ISO8601|DATETMZ": functools.partial(isostr2dt, hastime=True,
-                                             hasmicro=False),
-        "ISO8601|DATE___": functools.partial(isostr2dt, hastime=False,
-                                             hasmicro=False),
+        "datetime_microsecond": functools.partial(isostr2dt, hastime=True,
+                                                  hasmicro=True),
+        "date": functools.partial(isostr2dt, hastime=False,
+                                  hasmicro=False),
         "tuple": tuple,
         "list": list,
         "set": set,

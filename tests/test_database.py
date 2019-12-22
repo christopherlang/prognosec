@@ -1,6 +1,7 @@
 import pytest
 import database
 import os
+import datetime
 # from typing import Set, Dict, List, Sequence, Tuple
 
 
@@ -106,53 +107,63 @@ class TestMetaTemplateClass:
         assert fix_meta_instance.get_required('key1') is False
 
 
-class TestParseTypespecFunction:
+class TestParseTyperuleFunction:
 
     @pytest.fixture
-    def parse_typesec(self):
+    def parse_typerule(self):
         return database.parse_typerule
 
     def test_module_has_function(self):
         assert hasattr(database, 'parse_typerule')
 
-    def test_singleton_input_int(self, parse_typesec):
-        assert parse_typesec('50', 'int') == 50
+    def test_singleton_input_int(self, parse_typerule):
+        assert parse_typerule('50', 'int') == 50
 
-    def test_singleton_input_float(self, parse_typesec):
-        assert parse_typesec('50.7', 'float') == 50.7
+    def test_singleton_input_float(self, parse_typerule):
+        assert parse_typerule('50.7', 'float') == 50.7
 
-    def test_singleton_input_bool(self, parse_typesec):
-        assert parse_typesec(True, 'bool') is True
-        assert parse_typesec('true', 'bool') is True
+    def test_singleton_input_date(self, parse_typerule):
+        expected = datetime.date(2019, 1, 1).isoformat()
+        assert parse_typerule('2019-01-01', 'date') == expected
 
-    def test_tuple_singleton_input_str(self, parse_typesec):
-        assert parse_typesec((1, 2), 'tuple[str]') == ('1', '2')
+    def test_singleton_input_datetime(self, parse_typerule):
+        expected = datetime.datetime(2019, 1, 1, 10, 20, 30)
+        parsed_version = parse_typerule('2019-01-01T10:20:30',
+                                        'datetime_second')
+        assert parsed_version == expected
 
-    def test_tuple_set_int(self, parse_typesec):
+    def test_singleton_input_bool(self, parse_typerule):
+        assert parse_typerule(True, 'bool') is True
+        assert parse_typerule('true', 'bool') is True
+
+    def test_tuple_singleton_input_str(self, parse_typerule):
+        assert parse_typerule((1, 2), 'tuple[str]') == ('1', '2')
+
+    def test_tuple_set_int(self, parse_typerule):
         dataseries = [set([1, 2]), set([3, 4]), set([5])]
         expected = (['1', '2'], ['3', '4'], ['5'])
         typespec = 'tuple[list[str]]'
-        assert database.parse_typerule(dataseries, typespec) == expected
+        assert parse_typerule(dataseries, typespec) == expected
 
-    def test_dict_str_int(self, parse_typesec):
+    def test_dict_str_int(self, parse_typerule):
         dataseries = {'a': '60', 'b': '100'}
         expected = {'a': 60, 'b': 100}
         typespec = 'dict[str, int]'
-        assert database.parse_typerule(dataseries, typespec) == expected
+        assert parse_typerule(dataseries, typespec) == expected
 
-    def test_dict_str_tuple_int(self, parse_typesec):
+    def test_dict_str_tuple_int(self, parse_typerule):
         dataseries = {'a': tuple(['60']), 'b': tuple(['100'])}
         expected = {'a': tuple([60]), 'b': tuple([100])}
         typespec = 'dict[str, tuple[int]]'
-        assert database.parse_typerule(dataseries, typespec) == expected
+        assert parse_typerule(dataseries, typespec) == expected
 
-    def test_tuple_list_dict_str_int(self, parse_typesec):
+    def test_tuple_list_dict_str_int(self, parse_typerule):
         dataseries = [[{'a': '4', 'b': '6'}, {'c': '10'}], [{'z': '102'}]]
         expected = ([{'a': 4, 'b': 6}, {'c': 10}], [{'z': 102}])
         typespec = 'tuple[list[dict[str, int]]]'
-        assert database.parse_typerule(dataseries, typespec) == expected
+        assert parse_typerule(dataseries, typespec) == expected
 
-    def test_tuple_list_dict_str_set_int(self, parse_typesec):
+    def test_tuple_list_dict_str_set_int(self, parse_typerule):
         dataseries = (
             [
                 [{'a': set(['70', '50', '100'])}, {'a': set(['17', '59'])}],
@@ -168,13 +179,24 @@ class TestParseTypespecFunction:
             )
         )
         typespec = 'tuple[list[dict[str, set[int]]]]'
-        assert database.parse_typerule(dataseries, typespec) == expected
+        assert parse_typerule(dataseries, typespec) == expected
 
 
 class TestConformsToTypespecFunction:
 
     def test_conforms_int(self):
         assert database.conforms_to_typerule(50, 'int')
+
+    def test_conforms_date(self):
+        assert database.conforms_to_typerule('2019-01-01', 'date')
+
+    def test_conforms_datetime(self):
+        assert database.conforms_to_typerule('2019-01-01T09:10:10',
+                                             'datetime_second')
+
+    def test_conforms_datetime_utc(self):
+        assert database.conforms_to_typerule('2019-01-01T09:10:10Z',
+                                             'datetime_second')
 
     def test_conforms_list_int(self):
         assert database.conforms_to_typerule([50, 100], 'list[int]')
@@ -193,6 +215,9 @@ class TestConformsToTypespecFunction:
             ['singular']
         )
         assert database.conforms_to_typerule(data, 'tuple[list[str]]')
+
+    def test_conforms_tuple_empty(self):
+        assert database.conforms_to_typerule(tuple(), 'tuple[str]')
 
     def test_conforms_dict_tuple_bool(self):
         data = {
@@ -219,6 +244,9 @@ class TestConformsToTypespecFunction:
         typespec = 'dict[str, dict[str, tuple[bool]]]'
         assert database.conforms_to_typerule(data, typespec)
 
+    def test_conforms_dict_empty(self):
+        assert database.conforms_to_typerule(dict(), 'dict[str, str]')
+
     def test_conforms_list_dict_tuple_dict_float(self):
         data = [
             {'a': ({'b': 5.67, 'c': 7.401}, {'g': 1.1, 'h': 2.5}),
@@ -230,6 +258,9 @@ class TestConformsToTypespecFunction:
 
         typespec = 'list[dict[str, tuple[dict[str, float]]]]'
         assert database.conforms_to_typerule(data, typespec)
+
+    def test_conforms_list_empty(self):
+        assert database.conforms_to_typerule(list(), 'list[str]')
 
     def test_conforms_invalid_typespec(self):
         data = {
@@ -351,43 +382,53 @@ class TestMetaClass:
             dbmeta.reset('name2222')
 
 
-# class TestInitDatabaseFunction:
+class TestInitDatabaseFunction:
 
-#     @pytest.fixture
-#     def rootdir(self, tmp_path):
-#         # Directory to save the database directory
-#         return tmp_path
+    @pytest.fixture
+    def rootdir(self, tmp_path):
+        # Directory to save the database directory
+        return tmp_path
 
-#     def test_run_init(self, rootdir):
-#         try:
-#             database.init_database(rootdir=rootdir, dbdir_name='database')
-#         except AttributeError as e:
-#             pytest.fail(e.args[0])
+    def test_run_init(self, rootdir):
+        try:
+            database.init_database(rootdir=rootdir, dbdir_name='database')
+        except AttributeError as e:
+            pytest.fail(e.args[0])
 
-#     def test_creates_database_directory(self, rootdir):
-#         assert os.path.exists(os.path.join(rootdir, 'database')) is False
+    def test_creates_database_directory(self, rootdir):
+        assert os.path.exists(os.path.join(rootdir, 'database')) is False
 
-#         database.init_database(rootdir=rootdir, dbdir_name='database')
+        database.init_database(rootdir=rootdir, dbdir_name='database')
 
-#         assert os.path.exists(os.path.join(rootdir, 'database'))
+        assert os.path.exists(os.path.join(rootdir, 'database'))
 
-#     def test_database_directory_already_exists(self, rootdir):
-#         os.mkdir(os.path.join(rootdir, 'database'))
+    def test_database_directory_already_exists(self, rootdir):
+        os.mkdir(os.path.join(rootdir, 'database'))
 
-#         with pytest.raises(FileExistsError):
-#             database.init_database(rootdir=rootdir, dbdir_name='database')
+        with pytest.raises(FileExistsError):
+            database.init_database(rootdir=rootdir, dbdir_name='database')
 
-    # def test_created_database_meta(self, rootdir):
-    #     database.init_database(rootdir=rootdir, dbdir_name='database')
+    def test_created_database_meta(self, rootdir):
+        database.init_database(rootdir=rootdir, dbdir_name='database')
 
-    #     metafile_loc = os.path.join(rootdir, 'database', 'database_meta.json')
+        metafile_loc = os.path.join(rootdir, 'database', 'database_meta.json')
 
-    #     assert os.path.exists(metafile_loc)
+        assert os.path.exists(metafile_loc)
 
-        # pytest.fail()
+    def test_created_stores_directory(self, rootdir):
+        database.init_database(rootdir=rootdir, dbdir_name='database')
 
-# class TestMetaClass:
+        storesdir = os.path.join(rootdir, 'database', 'stores')
 
-#     @pytest.fixture
-#     def meta(self):
-#         return database.Meta(filepath='')
+        assert os.path.exists(storesdir)
+
+    def test_raises_on_missing_rootdir(self, rootdir):
+        fakepath = os.path.join(rootdir, 'continue')
+        with pytest.raises(FileNotFoundError):
+            database.init_database(rootdir=fakepath, dbdir_name='database')
+
+    def test_raise_on_existing_dbdir(self, rootdir):
+        database.init_database(rootdir=rootdir, dbdir_name='database')
+
+        with pytest.raises(FileExistsError):
+            database.init_database(rootdir=rootdir, dbdir_name='database')
