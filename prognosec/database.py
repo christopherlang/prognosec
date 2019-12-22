@@ -3,7 +3,7 @@ import datetime
 import functools
 import re
 # import collections
-# import os
+import os
 # import sys
 # import operator
 # import copy
@@ -111,6 +111,33 @@ class MetaTemplate:
         else:
             raise TypeError("Not supported as template has been frozen")
 
+    @progutils.typecheck(key=str)
+    def get_typerule(self, key):
+        if key not in self.template_keys:
+            msg = f"key '{key}' is not a valid key. "
+            msg += "See 'template_keys' property"
+            raise KeyError(msg)
+
+        return self._metadata[key][0]
+
+    @progutils.typecheck(key=str)
+    def get_default(self, key):
+        if key not in self.template_keys:
+            msg = f"key '{key}' is not a valid key. "
+            msg += "See 'template_keys' property"
+            raise KeyError(msg)
+
+        return self._metadata[key][2]
+
+    @progutils.typecheck(key=str)
+    def get_required(self, key):
+        if key not in self.template_keys:
+            msg = f"key '{key}' is not a valid key. "
+            msg += "See 'template_keys' property"
+            raise KeyError(msg)
+
+        return self._metadata[key][1]
+
 
 class MetaDatabaseTemplate(MetaTemplate):
     template_keys = {
@@ -179,36 +206,157 @@ class MetaTableTemplate(MetaTemplate):
         self.frozen = True
 
 
-def parse_typespec(value, typespec):
-    typespec = typespec.replace(' ', '').lower()
+class Meta:
 
-    if typespec.find('[') == -1:  # Did NOT find another left bracket
-        value = typeconverts(typespec)(value)
+    @progutils.typecheck(template=MetaTemplate)
+    def __init__(self, template):
+        self._template = template
+
+        temp_items = self._template.metadata.items()
+        self._metadata = {k: v[2] for k, v in temp_items}
+        self._keys_edited = {k: False for k, v in temp_items}
+
+    @property
+    def metadata(self):
+        if all(self._keys_edited.values()) is False:
+            raise KeyError("Not all required keys has been filled")
+
+        return self._metadata
+
+    @property
+    def template(self):
+        return self._template
+
+    def replace(self, key, value):
+        if key not in self._metadata.keys():
+            raise KeyError(f"Template did not define a key '{key}'")
+
+        template_typerule = self.template.get_typerule(key)
+        if conforms_to_typerule(value, template_typerule) is False:
+            msg = f"value '{value}' does not conform to typerule "
+            msg += f"'{template_typerule}'"
+            raise TypeError(msg)
+
+        self._metadata[key] = value
+        self._keys_edited[key] = True
+
+    def edit(self, key, value):
+        if key not in self._metadata.keys():
+            raise KeyError(f"Template did not define a key '{key}'")
+
+        template_typerule = self.template.get_typerule(key)
+        if conforms_to_typerule(value, template_typerule) is False:
+            msg = f"value '{value}' does not conform to typerule "
+            msg += f"'{template_typerule}'"
+            raise TypeError(msg)
+
+        if template_typerule.find("[") >= 0:
+
+            rootstruct = template_typerule[:template_typerule.find("[")]
+            currvalue = self._metadata[key]
+
+            if rootstruct == 'list' and isinstance(currvalue, list):
+                self._metadata[key].extend(value)
+            elif rootstruct == 'tuple' and isinstance(currvalue, tuple):
+                self._metadata[key] = self._metadata[key] + value
+            elif rootstruct == 'set' and isinstance(currvalue, set):
+                self._metadata[key].union(value)
+            elif rootstruct == 'dict' and isinstance(currvalue, dict):
+                self._metadata[key].update(value)
+            elif rootstruct in ['list', 'tuple', 'set', 'dict']:
+                # Capture instances where currvalue is not any of the structs
+                self._metadata[key] = value
+            else:
+                raise TypeError("Sequence-like object not supported")
+
+        else:
+            # Capture singletons e.g. 'int', 'float'
+            self._metadata[key] = value
+
+        self._keys_edited[key] = True
+
+    def reset(self, key):
+        self._metadata[key] = self.template.get_default(key)
+
+
+def init_database(rootdir, dbdir_name='database'):
+    dbdir_path = os.path.join(rootdir, dbdir_name)
+    os.mkdir(dbdir_path)
+
+    # Generate a new Meta object
+    # Meta
+
+
+def parse_typerule(value, typerule):
+    typerule = typerule.replace(' ', '').lower()
+
+    if typerule.find('[') == -1:  # Did NOT find another left bracket
+        value = typeconverts(typerule)(value)
     else:
-        data_struct, typespec = typespec.split("[", 1)
-        typespec = typespec[:-1]  # Remove right bracket (assoc. above)
+        data_struct, typerule = typerule.split("[", 1)
+        typerule = typerule[:-1]  # Remove right bracket (assoc. above)
 
         if data_struct in ['set', 'tuple', 'list']:
 
-            value = [parse_typespec(i, typespec) for i in value]
+            value = [parse_typerule(i, typerule) for i in value]
             value = typeconverts(data_struct)(value)
 
         elif data_struct == 'dict':
 
-            keyspec, valuespec = typespec.split(",", 1)
+            keyspec, valuespec = typerule.split(",", 1)
             key_converter = typeconverts(keyspec)
 
             if valuespec.find('[') == -1:
                 value = {key_converter(k): typeconverts(valuespec)(v)
                          for k, v in value.items()}
             else:
-                value = {key_converter(k): parse_typespec(v, valuespec)
+                value = {key_converter(k): parse_typerule(v, valuespec)
                          for k, v in value.items()}
 
         else:
             raise TypeError(f"'{data_struct}' not supported")
 
     return value
+
+
+def conforms_to_typerule(value, typerule):
+    typerule = typerule.replace(' ', '').lower()
+
+    def check_if_value_conforms(value, typerule):
+        if typerule.find('[') == -1:
+            is_of_type = isinstance(value, typeconverts(typerule))
+        else:
+            data_struct, typerule = typerule.split("[", 1)
+            typerule = typerule[:-1]  # Remove right bracket (assoc. above)
+
+            is_of_type = isinstance(value, typeconverts(data_struct))
+
+            if data_struct in ['set', 'tuple', 'list']:
+
+                elem_of_type = [conforms_to_typerule(i, typerule)
+                                for i in value]
+                is_of_type = is_of_type and all(elem_of_type)
+
+            elif data_struct == 'dict':
+
+                keyspec, valuespec = typerule.split(",", 1)
+
+                key_of_type = [conforms_to_typerule(i, keyspec)
+                               for i in value]
+                value_of_type = [conforms_to_typerule(i, valuespec)
+                                 for i in value.values()]
+
+                is_of_type = (is_of_type and all(key_of_type) and
+                              all(value_of_type))
+
+        return is_of_type
+
+    try:
+        output = check_if_value_conforms(value=value, typerule=typerule)
+    except (KeyError, TypeError, AttributeError):
+        output = False
+
+    return output
 
 
 def isostr2dt(isostring, hastime=True, hasmicro=True):
