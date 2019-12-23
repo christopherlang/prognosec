@@ -1,4 +1,5 @@
 import pytest
+import json
 import database
 import os
 import datetime
@@ -123,7 +124,7 @@ class TestParseTyperuleFunction:
         assert parse_typerule('50.7', 'float') == 50.7
 
     def test_singleton_input_date(self, parse_typerule):
-        expected = datetime.date(2019, 1, 1).isoformat()
+        expected = datetime.date(2019, 1, 1)
         assert parse_typerule('2019-01-01', 'date') == expected
 
     def test_singleton_input_datetime(self, parse_typerule):
@@ -131,6 +132,14 @@ class TestParseTyperuleFunction:
         parsed_version = parse_typerule('2019-01-01T10:20:30',
                                         'datetime_second')
         assert parsed_version == expected
+
+    def test_singleton_input_int_or_str_no_primary(self, parse_typerule):
+        assert parse_typerule('50', 'int|str') == 50
+        assert parse_typerule('50', 'str|int') == '50'
+
+    def test_singleton_input_int_or_str_with_primary(self, parse_typerule):
+        assert parse_typerule('50', 'int|~str') == '50'
+        assert parse_typerule('50', 'str|~int') == 50
 
     def test_singleton_input_bool(self, parse_typerule):
         assert parse_typerule(True, 'bool') is True
@@ -144,6 +153,39 @@ class TestParseTyperuleFunction:
         expected = (['1', '2'], ['3', '4'], ['5'])
         typespec = 'tuple[list[str]]'
         assert parse_typerule(dataseries, typespec) == expected
+
+    def test_tuple_str_or_int_no_primary(self, parse_typerule):
+        parsed = parse_typerule(('10', '20', '30'), 'tuple[int|str]')
+        expected = (10, 20, 30)
+        assert parsed == expected
+
+    def test_tuple_str_or_int_with_primary(self, parse_typerule):
+        parsed = parse_typerule((10, 20, 30), 'tuple[int|~str]')
+        expected = ('10', '20', '30')
+        assert parsed == expected
+
+    def test_tuple_mixed_str_or_int_no_primary(self, parse_typerule):
+        parsed = parse_typerule(('10', '20', 30), 'tuple[int|~str]')
+        expected = ('10', '20', '30')
+        assert parsed == expected
+
+    def test_dict_str_int_or_float(self, parse_typerule):
+        parsed = parse_typerule({'a': 50, 'b': '100'}, 'dict[str, ~int|float]')
+        expected = {'a': 50, 'b': 100}
+        assert parsed == expected
+
+    def test_dict_str_tuple_int_or_float(self, parse_typerule):
+        data = {
+            'a': (50, 100),
+            'b': (50, 100.65),
+        }
+        parsed = parse_typerule(data, 'dict[str, tuple[int|~float]]')
+        expected = {
+            'a': (50.0, 100.0),
+            'b': (50.0, 100.65),
+        }
+
+        assert parsed == expected
 
     def test_dict_str_int(self, parse_typerule):
         dataseries = {'a': '60', 'b': '100'}
@@ -197,6 +239,38 @@ class TestConformsToTypespecFunction:
     def test_conforms_datetime_utc(self):
         assert database.conforms_to_typerule('2019-01-01T09:10:10Z',
                                              'datetime_second')
+
+    def test_conforms_datetime_obj(self):
+        the_datetime = datetime.datetime.utcnow().replace(microsecond=0)
+
+        assert database.conforms_to_typerule(the_datetime, 'datetime_second')
+
+    def test_conforms_date_obj(self):
+        the_date = datetime.datetime.utcnow().date()
+
+        assert database.conforms_to_typerule(the_date, 'datetime_second')
+
+    def test_conforms_int_or_str(self):
+        assert database.conforms_to_typerule(50, 'int|str')
+        assert database.conforms_to_typerule('50', 'int|str')
+
+    def test_conforms_int_or_str_float_input(self):
+        assert database.conforms_to_typerule(56.0, 'int|str') is False
+
+    def test_conforms_list_int_or_str_singular_input(self):
+        assert database.conforms_to_typerule([50, 100, 500], 'list[int|str]')
+        assert database.conforms_to_typerule(['50', '100'], 'list[int|str]')
+
+    def test_conforms_list_int_or_str_mixed_input(self):
+        assert database.conforms_to_typerule([50, '100', 500], 'list[int|str]')
+
+    def test_conforms_list_tuple_int_or_float(self):
+        data = [
+            (100, 200, 300),
+            (24.3, 78.8, 400.10),
+            (24.3, 100, 10)
+        ]
+        assert database.conforms_to_typerule(data, 'list[tuple[int|float]]')
 
     def test_conforms_list_int(self):
         assert database.conforms_to_typerule([50, 100], 'list[int]')
@@ -271,6 +345,53 @@ class TestConformsToTypespecFunction:
         typespec = 'dict[str, dict[str, tuple[bool]'
 
         assert database.conforms_to_typerule(data, typespec) is False
+
+    # def test_conforms_tuple_int_or_tuple_float(self):
+    #     data1 = (100, 50, 60)
+    #     data2 = (100.5, 50.7, 60.123)
+
+    #     typespec = 'tuple[int]|tuple[float]'
+
+    #     assert database.conforms_to_typerule(data1, typespec)
+    #     assert database.conforms_to_typerule(data2, typespec)
+
+    # def test_conforms_tuple_int_or_list_str(self):
+    #     data1 = (100, 50, 60)
+    #     data2 = ['a', 'b', 'cthe']
+
+    #     typespec = 'tuple[int]|list[str]'
+
+    #     assert database.conforms_to_typerule(data1, typespec)
+    #     assert database.conforms_to_typerule(data2, typespec)
+
+    # def test_conforms_tuple_list_bool_or_list_str(self):
+    #     data1 = ([True, False, True], [True, False, True], [True, False])
+    #     data2 = ['a', 'b', 'cthe']
+
+    #     typespec = 'tuple[list[bool]]|list[str]'
+
+    #     assert database.conforms_to_typerule(data1, typespec)
+    #     assert database.conforms_to_typerule(data2, typespec)
+
+    # def test_conforms_str_or_list_str(self):
+    #     data1 = "goodnight"
+    #     data2 = ['a', 'b', 'cthe']
+
+    #     typespec = 'list[str]|str'
+
+    #     assert database.conforms_to_typerule(data1, typespec)
+    #     assert database.conforms_to_typerule(data2, typespec)
+
+    # def test_conforms_str_or_int_or_list_str(self):
+    #     data1 = "goodnight"
+    #     data2 = ['a', 'b', 'cthe']
+    #     data3 = 60
+
+    #     typespec = 'list[str]|str|int'
+
+    #     # assert database.conforms_to_typerule(data1, typespec)
+    #     # assert database.conforms_to_typerule(data2, typespec)
+    #     assert database.conforms_to_typerule(data3, typespec)
 
 
 class TestMetaClass:
@@ -381,6 +502,15 @@ class TestMetaClass:
         with pytest.raises(KeyError):
             dbmeta.reset('name2222')
 
+    def test_create_meta_existing_metadata(self):
+        meta = database.Meta(template=database.MetaDatabaseTemplate(),
+                             metadata={'name': 'new_database',
+                                       'tables': ('tab1', 'tab2')})
+
+        assert meta._metadata['name'] == 'new_database'
+        assert meta._metadata['tables'] == ('tab1', 'tab2')
+        assert meta._metadata['total_table_records'] == 0
+
 
 class TestInitDatabaseFunction:
 
@@ -432,3 +562,117 @@ class TestInitDatabaseFunction:
 
         with pytest.raises(FileExistsError):
             database.init_database(rootdir=rootdir, dbdir_name='database')
+
+    def test_meta_written(self, rootdir):
+        tmp = database.init_database(rootdir=rootdir, dbdir_name='database')
+        metaloc = tmp.metadata['database_meta_location']
+        with open(metaloc, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+
+            dbtemp = database.MetaDatabaseTemplate()
+            for key in loaded:
+                typerule = dbtemp.get_typerule(key)
+                loaded[key] = database.parse_typerule(loaded[key], typerule)
+
+        assert tmp.metadata == loaded
+
+
+class TestInitTableFunction:
+
+    @pytest.fixture
+    def dbpath(self, tmp_path):
+        database.init_database(tmp_path, 'database')
+
+        return os.path.join(tmp_path, 'database')
+
+    @pytest.fixture
+    def dbmeta(self, dbpath):
+        tmp = database.DatabaseManager(dbpath=dbpath)
+
+        return tmp.meta
+
+    def test_typerule_checking(self, dbmeta):
+        with pytest.raises(TypeError):
+            database.init_table(
+                name=600, columns=('x1', 'x2', 'x3'),
+                datatypes=('int', 'str', 'int'), keys=('x1',),
+                dbmeta=dbmeta)
+
+    def test_raise_on_existing_table(self, dbmeta):
+        dbmeta.edit('tables', ('new_table',))
+
+        with pytest.raises(ValueError):
+            database.init_table(
+                name='new_table', columns=('x1', 'x2', 'x3'),
+                datatypes=('int', 'str', 'int'), keys=('x1',),
+                dbmeta=dbmeta)
+
+    def test_table_directory_created(self, dbmeta):
+        tblmeta = database.init_table(
+            name='new_table', columns=('x1', 'x2', 'x3'),
+            datatypes=('int', 'str', 'int'), keys=('x1',),
+            dbmeta=dbmeta)
+
+        assert os.path.exists(tblmeta.metadata['table_directory'])
+
+    def test_meta_file_created(self, dbmeta):
+        tblmeta = database.init_table(
+            name='new_table', columns=('x1', 'x2', 'x3'),
+            datatypes=('int', 'str', 'int'), keys=('x1',),
+            dbmeta=dbmeta)
+
+        metaloc = tblmeta.metadata['index_file_location']
+        with open(metaloc, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+
+            dbtemp = database.MetaTableTemplate()
+            for key in loaded:
+                # breakpoint()
+                typerule = dbtemp.get_typerule(key)
+
+                # TODO
+                # This is a bypass for foreign key, which can hold None
+                # Check init_table function for the associated TODO there
+                if key == 'foreign':
+                    pass
+                else:
+                    loaded[key] = database.parse_typerule(loaded[key],
+                                                          typerule)
+
+        assert tblmeta.metadata == loaded
+
+
+
+class TestDatabaseManagerClass:
+
+    @pytest.fixture
+    def dbpath(self, tmp_path):
+        database.init_database(tmp_path, 'database')
+
+        return os.path.join(tmp_path, 'database')
+
+    @pytest.fixture
+    def dbman_instance(self, dbpath):
+        return database.DatabaseManager(dbpath=dbpath)
+
+    def test_create_instance(self, dbpath):
+        database.DatabaseManager(dbpath=dbpath)
+
+    def test_has_metadata_property(self, dbman_instance):
+        assert hasattr(dbman_instance, 'meta')
+
+    def test_all_metadata_conforms(self, dbman_instance):
+        template = database.MetaDatabaseTemplate()
+        for key in dbman_instance.meta.metadata:
+            typerule = template.get_typerule(key)
+            value = dbman_instance.meta.metadata[key]
+            assert database.conforms_to_typerule(value, typerule)
+
+    def test_create_new_table(self, dbman_instance):
+        dbman_instance.create_table(
+            name='new_table', columns=('x1', 'x2', 'x3'), keys=('x1',))
+
+    # def test_create_new_table_typerule_checks(self, dbman_instance):
+    #     with pytest.raises(ValueError):
+    #         dbman_instance.create_table(
+    #             name=600, columns=('x1', 'x2', 'x3'), keys=('x1',))
