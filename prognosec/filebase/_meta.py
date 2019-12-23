@@ -1,51 +1,9 @@
 import json
-import datetime
-import functools
-# import collections
-import os
-# import sys
-# import operator
 import copy
-from typing import Sequence, Tuple
 import collections
-from progutils import progutils
-
-
-class DatabaseManager:
-
-    def __init__(self, dbpath):
-        self._metatemplate = MetaDatabaseTemplate()
-        self._meta = self._load_metafile(dbpath=dbpath)
-
-    @property
-    def meta(self):
-        return self._meta
-
-    @property
-    def template(self):
-        return self._metatemplate
-
-    def _load_metafile(self, dbpath):
-        metafileloc = os.path.join(dbpath, 'database_meta.json')
-        with open(metafileloc, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
-
-        for key in metadata:
-            typerule = self._metatemplate.get_typerule(key)
-            meta_value = metadata[key]
-            meta_value = parse_typerule(meta_value, typerule)
-            metadata[key] = meta_value
-
-        return Meta(template=self.template, metadata=metadata)
-
-    def create_table(self, name, columns, keys):
-        pass
-        # tblinstance = Table(name=name, columns=columns, keys=keys)
-
-
-# class Table:
-
-#     def __init__()
+import datetime
+from typing import Sequence, Tuple
+from progutils import typechecks
 
 
 class MetaTemplate:
@@ -73,7 +31,7 @@ class MetaTemplate:
     template_keys: array_like[str]
         The required keys to be added to the template
     """
-    @progutils.typecheck(template_keys=(list, tuple))
+    @typechecks.typecheck(template_keys=(list, tuple))
     def __init__(self, template_keys: Sequence[str]):
         if all([isinstance(i, str) for i in template_keys]) is False:
             raise TypeError("All values in 'template_keys' must be string")
@@ -124,7 +82,7 @@ class MetaTemplate:
 
         return all(meta_key_in_template)
 
-    @progutils.typecheck(key=str, required=bool)
+    @typechecks.typecheck(key=str, required=bool)
     def add_typespec(self, key: str, typerule, required=False, default=None):
         if self.frozen is False:
             if key not in self.template_keys:
@@ -137,14 +95,14 @@ class MetaTemplate:
         else:
             raise TypeError("Not supported as template has been frozen")
 
-    @progutils.typecheck(key=str)
+    @typechecks.typecheck(key=str)
     def delete_typespec(self, key: str):
         if self.frozen is False:
             del self._metadata[key]
         else:
             raise TypeError("Not supported as template has been frozen")
 
-    @progutils.typecheck(key=str)
+    @typechecks.typecheck(key=str)
     def get_typerule(self, key):
         if key not in self.template_keys:
             msg = f"key '{key}' is not a valid key. "
@@ -153,7 +111,7 @@ class MetaTemplate:
 
         return self._metadata[key][0]
 
-    @progutils.typecheck(key=str)
+    @typechecks.typecheck(key=str)
     def get_default(self, key):
         if key not in self.template_keys:
             msg = f"key '{key}' is not a valid key. "
@@ -162,7 +120,7 @@ class MetaTemplate:
 
         return self._metadata[key][2]
 
-    @progutils.typecheck(key=str)
+    @typechecks.typecheck(key=str)
     def get_required(self, key):
         if key not in self.template_keys:
             msg = f"key '{key}' is not a valid key. "
@@ -243,7 +201,7 @@ class MetaTableTemplate(MetaTemplate):
 
 class Meta:
 
-    @progutils.typecheck(template=MetaTemplate)
+    @typechecks.typecheck(template=MetaTemplate)
     def __init__(self, template: MetaTemplate, metadata: dict = None,
                  metapath: str = None):
         self._template = template
@@ -282,7 +240,7 @@ class Meta:
             raise KeyError(f"Template did not define a key '{key}'")
 
         template_typerule = self.template.get_typerule(key)
-        if conforms_to_typerule(value, template_typerule) is False:
+        if typechecks.conforms_to_typerule(value, template_typerule) is False:
             msg = f"value '{value}' does not conform to typerule "
             msg += f"'{template_typerule}'"
             raise TypeError(msg)
@@ -305,7 +263,8 @@ class Meta:
         if template_required is False and value is None:
             # TODO: Bandaid for foreign key
             raise TypeError
-        elif conforms_to_typerule(value, template_typerule) is False:
+        elif (typechecks.conforms_to_typerule(value, template_typerule) is
+                False):
             msg = f"value '{value}' does not conform to typerule "
             msg += f"'{template_typerule}'"
             raise TypeError(msg)
@@ -372,273 +331,3 @@ class Meta:
 
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=0, ensure_ascii=False)
-
-
-def init_database(rootdir, dbdir_name='database'):
-    rootdir = os.path.abspath(rootdir)
-    dbdir_path = os.path.join(rootdir, dbdir_name)
-    stores_path = os.path.join(dbdir_path, 'stores')
-
-    if os.path.exists(rootdir) is False:
-        raise FileNotFoundError(f"Directory '{rootdir}' does not exist")
-
-    if os.path.exists(dbdir_path) is True:
-        msg = f"Database directory '{dbdir_path}' already exists"
-        raise FileExistsError(msg)
-
-    os.mkdir(dbdir_path)
-    os.mkdir(stores_path)
-
-    # Generate a new Meta object
-    dbmeta = Meta(template=MetaDatabaseTemplate())
-    nowtime = utcnow()
-    dbmeta.edit('name', dbdir_name)
-    dbmeta.edit('tables', tuple())
-    dbmeta.edit('collections', tuple())
-    dbmeta.edit('created', nowtime)
-    dbmeta.edit('last_modified', nowtime)
-    dbmeta.edit('total_table_records', 0)
-    dbmeta.edit('total_documents', 0)
-    dbmeta.edit('database_directory', dbdir_path)
-    dbmeta.edit('database_root_directory', rootdir)
-    dbmeta.edit('database_data_root_directory', stores_path)
-    dbmeta.edit('table_meta_locations', dict())
-    dbmeta.edit('collection_meta_locations', dict())
-
-    dbmeta_file_loc = os.path.join(dbdir_path, 'database_meta.json')
-    dbmeta.edit('database_meta_location', dbmeta_file_loc)
-
-    dbmeta.write(dbmeta_file_loc)
-
-    return dbmeta
-
-
-@progutils.typecheck(name=str)
-def init_table(name, columns, datatypes, keys, dbmeta: Meta,
-               foreign: Tuple[str] = None, storage_type: str = 'singular'):
-    if name in dbmeta.metadata['tables']:
-        raise ValueError(f"Table '{name}' already exists")
-
-    storesdir = dbmeta.metadata['database_data_root_directory']
-    tbldir = os.path.join(storesdir, 'table__' + name)
-
-    os.mkdir(tbldir)
-
-    # Generate a new Meta object
-    tblmeta = Meta(template=MetaTableTemplate())
-    nowtime = utcnow()
-    tblmeta.edit('name', name)
-    tblmeta.edit('created', nowtime)
-    tblmeta.edit('last_modified', nowtime)
-    tblmeta.edit('columns', columns)
-    tblmeta.edit('datatypes', datatypes)
-    tblmeta.edit('keys', keys)
-    tblmeta.edit('enforce_integrity', True)
-    tblmeta.edit('nrecords', 0)
-    tblmeta.edit('database_directory', dbmeta.metadata['database_directory'])
-    tblmeta.edit('table_directory', tbldir)
-    tblmeta.edit('index_file_location', os.path.join(tbldir, 'metadata.json'))
-    tblmeta.edit('storage_type', storage_type)
-
-    # TODO
-    # This is a bypass due to the conform_typerule issues when setting things
-    # to `None`, when the typerule itself doesn't allow for `None`
-    # e.g. typerule is tuple[int] but since it is optional you can set it
-    # to `None`. But typerule doesn't allow it
-    # A bypass is also placed in the test file, method:
-    #   TestInitTableFunction::test_meta_file_created
-    tblmeta._metadata['foreign'] = foreign
-    tblmeta._keys_edited['foreign'] = True
-
-    tblmeta.write(tblmeta.metadata['index_file_location'])
-
-    return tblmeta
-
-
-def parse_typerule(value, typerule):
-    typerule = typerule.replace(' ', '').lower()
-
-    if typerule.find('[') == -1:  # Did NOT find another left bracket
-
-        if typerule.find('|') >= 0:
-            typerules = typerule.split('|')
-            if typerule.find('~') >= 0:
-                # Has OR operator AND has indicator of primary typerule
-                typerule = [i for i in typerules if i.find('~') >= 0][0]
-                typerule = typerule.replace('~', '')
-            else:
-                typerule = [i for i in typerules][0]
-
-        value = typeconverts(typerule)(value)
-    else:
-        data_struct, typerule = typerule.split("[", 1)
-        typerule = typerule[:-1]  # Remove right bracket (assoc. above)
-
-        if data_struct in ['set', 'tuple', 'list']:
-
-            value = [parse_typerule(i, typerule) for i in value]
-            value = typeconverts(data_struct)(value)
-
-        elif data_struct == 'dict':
-
-            keyspec, valuespec = typerule.split(",", 1)
-            key_converter = typeconverts(keyspec)
-
-            if valuespec.find('[') == -1:
-
-                if valuespec.find('|') >= 0:
-                    valuespecs = valuespec.split('|')
-                    if valuespec.find('~') >= 0:
-                        # Has OR operator AND has indicator of primary typerule
-                        valuespec = [i for i in valuespecs
-                                     if i.find('~') >= 0][0]
-                        valuespec = valuespec.replace('~', '')
-                    else:
-                        valuespec = [i for i in valuespecs][0]
-
-                value = {key_converter(k): typeconverts(valuespec)(v)
-                         for k, v in value.items()}
-            else:
-                value = {key_converter(k): parse_typerule(v, valuespec)
-                         for k, v in value.items()}
-
-        else:
-            raise TypeError(f"'{data_struct}' not supported")
-
-    return value
-
-
-def conforms_to_typerule(value, typerule):
-    typerule = typerule.replace(' ', '').lower()
-
-    def check_if_value_conforms(value, typerule):
-        # breakpoint()
-        if typerule.find('[') == -1:
-            if typerule.find('|') == -1:
-                typerules = [typerule]
-            else:
-                typerules = typerule.replace('~', '').split('|')
-
-            is_of_types = list()
-            for a_typerule in typerules:
-
-                if a_typerule == 'date':
-                    is_of_types.append(
-                        is_datetime_valid(
-                            value, hastime=False, hasmicro=False))
-                elif a_typerule == 'datetime_second':
-                    is_of_types.append(
-                        is_datetime_valid(
-                            value, hastime=True, hasmicro=False))
-                elif a_typerule == 'datetime_microsecond':
-                    is_of_types.append(
-                        is_datetime_valid(
-                            value, hastime=True, hasmicro=True))
-                else:
-                    is_of_types.append(
-                        isinstance(value, typeconverts(a_typerule)))
-
-            is_of_type = any(is_of_types)
-
-        else:
-            data_struct, typerule = typerule.split("[", 1)
-            typerule = typerule[:-1]  # Remove right bracket (assoc. above)
-
-            is_of_type = isinstance(value, typeconverts(data_struct))
-
-            if data_struct in ['set', 'tuple', 'list']:
-
-                elem_of_type = [conforms_to_typerule(i, typerule)
-                                for i in value]
-                is_of_type = is_of_type and all(elem_of_type)
-
-            elif data_struct == 'dict':
-
-                keyspec, valuespec = typerule.split(",", 1)
-
-                key_of_type = [conforms_to_typerule(i, keyspec)
-                               for i in value]
-                value_of_type = [conforms_to_typerule(i, valuespec)
-                                 for i in value.values()]
-
-                is_of_type = (is_of_type and all(key_of_type) and
-                              all(value_of_type))
-
-        return is_of_type
-
-    try:
-        output = check_if_value_conforms(value=value, typerule=typerule)
-    except (KeyError, TypeError, AttributeError):
-        output = False
-
-    return output
-
-
-def isostr2dt(isostring, hastime=True, hasmicro=True):
-    iso_format = "%Y-%m-%d"
-
-    if isostring.endswith('Z'):
-        isostring = isostring.replace('Z', '')
-
-    if hastime is True:
-        iso_format += "T%H:%M:%S"
-
-    if hasmicro is True:
-        iso_format += ".%f"
-    else:
-        isostring = isostring.partition(".")[0]
-
-    output = datetime.datetime.strptime(isostring, iso_format)
-
-    if hastime is False:
-        output = output.date()
-
-    return output
-
-
-def is_datetime_valid(isostring, hastime=True, hasmicro=True):
-    try:
-        isostr2dt(isostring=isostring, hastime=hastime, hasmicro=hasmicro)
-        output = True
-    except ValueError:
-        output = False
-    except AttributeError:
-        if isinstance(isostring, (datetime.datetime, datetime.date)):
-            output = True
-        else:
-            output = False
-
-    return output
-
-
-def utcnow_iso():
-    output = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
-    output += 'Z'
-    return output
-
-
-def utcnow():
-    output = datetime.datetime.utcnow().replace(microsecond=0)
-    return output
-
-
-def typeconverts(typespec):
-    typers = {
-        "str": str,
-        "float": float,
-        "int": int,
-        'bool': bool,
-        "datetime_second": functools.partial(isostr2dt, hastime=True,
-                                             hasmicro=False),
-        "datetime_microsecond": functools.partial(isostr2dt, hastime=True,
-                                                  hasmicro=True),
-        "date": functools.partial(isostr2dt, hastime=False,
-                                  hasmicro=False),
-        "tuple": tuple,
-        "list": list,
-        "set": set,
-        'dict': dict,
-        'None': lambda x: type(None)
-    }
-
-    return typers[typespec]

@@ -5,6 +5,7 @@ import numpy
 from progutils import progfunc
 from progutils import progutils
 from progutils import progexceptions
+from progutils import typechecks
 
 NAN_STR_METHODS = ('backfill', 'bfill', 'pad', 'ffill', 'asis', 'drop')
 INF_STR_METHODS = ('asis', 'asna', 'zero')
@@ -74,8 +75,8 @@ class Timeseries:
         Object hosting the ordered sequence of array transformation. Direct
         access to this object enables the editing of the sequence
     """
-    @progutils.typecheck_datetime_like('index')
-    @progutils.typecheck(series_name=str, index_name=str)
+    @typechecks.typecheck_datetime_like('index')
+    @typechecks.typecheck(series_name=str, index_name=str)
     def __init__(self, series, index=None, series_name=None, index_name=None,
                  strat_na=None, strat_inf=None, strat_up=None, strat_down=None,
                  transform=None):
@@ -149,7 +150,7 @@ class Timeseries:
         return self._series.index.name
 
     @name_index.setter
-    @progutils.typecheck(new_name=str)
+    @typechecks.typecheck(new_name=str)
     def name_index(self, new_name):
         """Set a new name for the index of the time series
 
@@ -170,7 +171,7 @@ class Timeseries:
         return self._series.name
 
     @name_series.setter
-    @progutils.typecheck(new_name=str)
+    @typechecks.typecheck(new_name=str)
     def name_series(self, new_name):
         """Set a new name for the time series
 
@@ -426,7 +427,7 @@ class Timeseries:
         return self._transform
 
     @transform.setter
-    @progutils.typecheck(transform=(progutils.Transformation, type(None)))
+    @typechecks.typecheck(transform=(progutils.Transformation, type(None)))
     def transform(self, transform):
         """Set a new transformation instance
 
@@ -567,7 +568,7 @@ class Timeseries:
         """
         return self.is_na(after_clean=after_clean).sum()
 
-    @progutils.typecheck(after_clean=bool)
+    @typechecks.typecheck(after_clean=bool)
     def is_na(self, after_clean=True):
         """Retrieve a boolean series that locates missing values
 
@@ -610,7 +611,7 @@ class Timeseries:
         """
         return self.is_inf(after_clean=after_clean).sum()
 
-    @progutils.typecheck(after_clean=bool)
+    @typechecks.typecheck(after_clean=bool)
     def is_inf(self, after_clean=True):
         """Retrieve a boolean series that locates infinities
 
@@ -661,7 +662,7 @@ class Timeseries:
         """
         return copy.deepcopy(self)
 
-    @progutils.typecheck(to_freq=(pandas.DateOffset, str), use_original=bool)
+    @typechecks.typecheck(to_freq=(pandas.DateOffset, str), use_original=bool)
     def resample(self, to_freq, use_original=False):
         """Resamples, or group by, values by index
 
@@ -769,8 +770,8 @@ class SeriesFrame:
         overwrites `df` index name
     """
 
-    @progutils.typecheck_datetime_like(param_name='index')
-    @progutils.typecheck(df=pandas.DataFrame, index_name=str)
+    @typechecks.typecheck_datetime_like(param_name='index')
+    @typechecks.typecheck(df=pandas.DataFrame, index_name=str)
     def __init__(self, df=None, index=None, index_name=None):
         df = copy.deepcopy(df)
         split_df = self._split_dataframe(df)
@@ -817,7 +818,7 @@ class SeriesFrame:
         return self._index
 
     @index.setter
-    @progutils.typecheck_datetime_like(param_name='index')
+    @typechecks.typecheck_datetime_like(param_name='index')
     def index(self, index):
         self._index = index
 
@@ -832,7 +833,7 @@ class SeriesFrame:
         return self._name_index
 
     @name_index.setter
-    @progutils.typecheck(index_name=str)
+    @typechecks.typecheck(index_name=str)
     def name_index(self, index_name):
         self._name_index = index_name
 
@@ -876,7 +877,7 @@ class SeriesFrame:
 
         return output
 
-    @progutils.typecheck(series=Timeseries, series_name=str)
+    @typechecks.typecheck(series=Timeseries, series_name=str)
     def add(self, series, series_name=None):
         """Add a new Timeseries object
 
@@ -898,7 +899,7 @@ class SeriesFrame:
         series.name_series = series_name
         self._frame[series_name] = series
 
-    @progutils.typecheck(series_name=str)
+    @typechecks.typecheck(series_name=str)
     def remove(self, series_name):
         """Delete a Timeseries
 
@@ -917,12 +918,12 @@ class SeriesFrame:
 
         del self._frame[series_name]
 
-    @progutils.typecheck(series_name=str)
+    @typechecks.typecheck(series_name=str)
     def drop(self, series_name):
         """Alias for `remove` method"""
         return self.remove(series_name)
 
-    @progutils.typecheck(series=Timeseries, series_name=str)
+    @typechecks.typecheck(series=Timeseries, series_name=str)
     def replace(self, series, series_name=None):
         """Replace an existing Timeseries
 
@@ -943,7 +944,7 @@ class SeriesFrame:
         series.name_series = series_name
         self._frame[series_name] = series
 
-    @progutils.dec_does_series_name_exist
+    @typechecks.dec_does_series_name_exist
     def access_series(self, series_name):
         """Get direct access to a Timeseries
 
@@ -975,8 +976,8 @@ class SeriesFrame:
     def access_transform(self, series_name):
         """Get direct access to a Timeseries' Transformation instance
 
-        This'll enable you to modify (e.g. add, delete) transformation functions
-        for that particular `Timeseries` instance.
+        This'll enable you to modify (e.g. add, delete) transformation
+        functions for that particular `Timeseries` instance.
 
         Parameters
         ----------
@@ -1115,7 +1116,7 @@ class SeriesFrame:
         """
         self.access_series(series_name).strat_down = strat_down
 
-    @progutils.typecheck(series_name=(str, list, tuple), use_original=bool)
+    @typechecks.typecheck(series_name=(str, list, tuple), use_original=bool)
     def resample(self, freq, series_names=None, use_original=False):
         """Resampling SeriesFrame to a new frequency
 

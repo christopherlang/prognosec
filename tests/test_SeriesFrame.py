@@ -1,6 +1,5 @@
 import pytest
 import collections
-import copy
 import numpy
 import string
 import pandas
