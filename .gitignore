@@ -3,6 +3,9 @@
 *.log
 *.tsv
 
+# Python pickle files
+*.pkl
+
 # JSON files specifically in data
 data/*.json
 data/**/*.json

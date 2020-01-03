@@ -178,7 +178,9 @@ class MetaTableTemplate(MetaTemplate):
         'database_directory': ("str", True, None),
         'table_directory': ("str", True, None),
         'index_file_location': ("str", True, None),
-        'storage_type': ("str", True, None)
+        'meta_file_location': ('str', True, None),
+        'storage_type': ("str", True, None),
+        'splice_keys': ("tuple[str]", False, None)
     }
 
     def __init__(self):
@@ -240,7 +242,7 @@ class Meta:
             raise KeyError(f"Template did not define a key '{key}'")
 
         template_typerule = self.template.get_typerule(key)
-        if typechecks.conforms_to_typerule(value, template_typerule) is False:
+        if typechecks.conforms_typerule(value, template_typerule) is False:
             msg = f"value '{value}' does not conform to typerule "
             msg += f"'{template_typerule}'"
             raise TypeError(msg)
@@ -262,8 +264,9 @@ class Meta:
         template_required = self.template.get_required(key)
         if template_required is False and value is None:
             # TODO: Bandaid for foreign key
-            raise TypeError
-        elif (typechecks.conforms_to_typerule(value, template_typerule) is
+            # raise TypeError
+            pass
+        elif (typechecks.conforms_typerule(value, template_typerule) is
                 False):
             msg = f"value '{value}' does not conform to typerule "
             msg += f"'{template_typerule}'"
@@ -331,3 +334,9 @@ class Meta:
 
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=0, ensure_ascii=False)
+
+    def __getitem__(self, key):
+        return self.metadata[key]
+
+    def __setitem__(self, key, value):
+        self.replace(key, value)

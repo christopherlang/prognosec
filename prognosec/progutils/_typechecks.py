@@ -1,7 +1,22 @@
 import functools
+import datetime
 import inspect
+import typing
 import pandas
+import numpy
 from progutils import progutils
+
+
+# Constants and predefinitions
+_ISO8601_CONVERT = progutils.isostr2dt
+_D_CONV = functools.partial(_ISO8601_CONVERT, hastime=False, hasmicro=False)
+_DT_CONV = functools.partial(_ISO8601_CONVERT, hastime=True, hasmicro=False)
+_DTS_CONV = functools.partial(_ISO8601_CONVERT, hastime=True, hasmicro=False)
+_DTMS_CONV = functools.partial(_ISO8601_CONVERT, hastime=True, hasmicro=True)
+
+
+def returner(x):
+    return
 
 
 def typecheck(**kwtypes):
@@ -87,146 +102,229 @@ def typecheck(**kwtypes):
     return check_instance
 
 
-def parse_typerule(value, typerule):
+def apply_typerule(value, typerule):
+
     typerule = typerule.replace(' ', '').lower()
 
-    if typerule.find('[') == -1:  # Did NOT find another left bracket
+    if typerule.count("|") > 0:
+        raise ValueError('typerule conversion does not support OR operator')
 
-        if typerule.find('|') >= 0:
-            typerules = typerule.split('|')
-            if typerule.find('~') >= 0:
-                # Has OR operator AND has indicator of primary typerule
-                typerule = [i for i in typerules if i.find('~') >= 0][0]
-                typerule = typerule.replace('~', '')
+    def typerule_converter(value, typerule):
+        if typerule.count("[") != typerule.count("]"):
+            raise ValueError("Invalid typerule specification")
+
+        if typerule.find("[") >= 0:
+            seqtype, elemtype = typerule.split("[", 1)
+            elemtype = elemtype.rsplit("]", 1)[0]  # Remove right bracket
+
+            if seqtype == 'dict':
+
+                dict_keytype, dict_valuetype = elemtype.split(',', 1)
+
+                result = dict()
+                for dict_key in value:
+                    new_key = typerule_converter(dict_key, dict_keytype)
+                    new_value = typerule_converter(value[dict_key],
+                                                   dict_valuetype)
+                    result[new_key] = new_value
+
             else:
-                typerule = [i for i in typerules][0]
+                seq_converter = types_converters(seqtype)
 
-        value = typeconverts(typerule)(value)
-    else:
-        data_struct, typerule = typerule.split("[", 1)
-        typerule = typerule[:-1]  # Remove right bracket (assoc. above)
-
-        if data_struct in ['set', 'tuple', 'list']:
-
-            value = [parse_typerule(i, typerule) for i in value]
-            value = typeconverts(data_struct)(value)
-
-        elif data_struct == 'dict':
-
-            keyspec, valuespec = typerule.split(",", 1)
-            key_converter = typeconverts(keyspec)
-
-            if valuespec.find('[') == -1:
-
-                if valuespec.find('|') >= 0:
-                    valuespecs = valuespec.split('|')
-                    if valuespec.find('~') >= 0:
-                        # Has OR operator AND has indicator of primary typerule
-                        valuespec = [i for i in valuespecs
-                                     if i.find('~') >= 0][0]
-                        valuespec = valuespec.replace('~', '')
-                    else:
-                        valuespec = [i for i in valuespecs][0]
-
-                value = {key_converter(k): typeconverts(valuespec)(v)
-                         for k, v in value.items()}
-            else:
-                value = {key_converter(k): parse_typerule(v, valuespec)
-                         for k, v in value.items()}
+                result = [typerule_converter(i, elemtype) for i in value]
+                result = seq_converter(result)
 
         else:
-            raise TypeError(f"'{data_struct}' not supported")
 
-    return value
+            result = types_converters(typerule)(value)
+
+        return result
+
+    return typerule_converter(value=value, typerule=typerule)
 
 
-def conforms_to_typerule(value, typerule):
-    typerule = typerule.replace(' ', '').lower()
+def conforms_typerule(value, typerule):
 
-    def check_if_value_conforms(value, typerule):
-        # breakpoint()
-        if typerule.find('[') == -1:
-            if typerule.find('|') == -1:
-                typerules = [typerule]
+    typerule = typerule.replace(' ', '').replace('~', '').lower()
+
+    def conformance(value, typerule):
+
+        if typerule.count("[") != typerule.count("]"):
+            raise ValueError("Invalid typerule specification")
+
+        output = list()
+
+        if typerule.find("[") >= 0 and typerule.find("]|") == -1:
+
+            seqtype, elemtype = typerule.split("[", 1)
+            elemtype = elemtype.rsplit("]", 1)[0]  # Remove right bracket
+
+            if seqtype == 'dict':
+
+                dict_keys = set(value.keys())
+                dict_values = list(value.values())
+                dict_keytype, dict_valuetype = elemtype.split(',', 1)
+
+                keys_isof = [conformance(i, dict_keytype) for i in dict_keys]
+                values_isof = [conformance(i, dict_valuetype)
+                               for i in dict_values]
+
+                output.extend(keys_isof)
+                output.extend(values_isof)
+
             else:
-                typerules = typerule.replace('~', '').split('|')
 
-            is_of_types = list()
-            for a_typerule in typerules:
-
-                if a_typerule == 'date':
-                    is_of_types.append(
-                        progutils.is_datetime_valid(
-                            value, hastime=False, hasmicro=False))
-                elif a_typerule == 'datetime_second':
-                    is_of_types.append(
-                        progutils.is_datetime_valid(
-                            value, hastime=True, hasmicro=False))
-                elif a_typerule == 'datetime_microsecond':
-                    is_of_types.append(
-                        progutils.is_datetime_valid(
-                            value, hastime=True, hasmicro=True))
+                if isinstance(value, types_str2object(seqtype)) is True:
+                    output.append(True)  # For the sequence itself
+                    elem_isof_type = [conformance(i, elemtype)
+                                      for i in value]
+                    output.extend(elem_isof_type)  # For each elem in sequence
                 else:
-                    is_of_types.append(
-                        isinstance(value, typeconverts(a_typerule)))
+                    output.append(False)
 
-            is_of_type = any(is_of_types)
+        elif typerule.find("]|") >= 0:
+
+            sub_typerules = _seq_or_split(typerule)
+
+            sub_isof = [conformance(value, i) for i in sub_typerules]
+            output.append(any(sub_isof))
+
+        elif typerule.find("|") >= 0:
+
+            typerules = typerule.split("|")
+
+            isof_typerules = [conformance(value, i) for i in typerules]
+            isof_typerules = any(isof_typerules)
+            output.append(isof_typerules)
 
         else:
-            data_struct, typerule = typerule.split("[", 1)
-            typerule = typerule[:-1]  # Remove right bracket (assoc. above)
 
-            is_of_type = isinstance(value, typeconverts(data_struct))
+            if typerule == 'primitive':
 
-            if data_struct in ['set', 'tuple', 'list']:
+                primitive_types = [int, float, bool, str]
+                isof_primitive = [isinstance(value, i)
+                                  for i in primitive_types]
+                isof_primitive.append(value is None)
 
-                elem_of_type = [conforms_to_typerule(i, typerule)
-                                for i in value]
-                is_of_type = is_of_type and all(elem_of_type)
+                isof_primitive = any(isof_primitive)
 
-            elif data_struct == 'dict':
+                output.append(isof_primitive)
 
-                keyspec, valuespec = typerule.split(",", 1)
+            else:
 
-                key_of_type = [conforms_to_typerule(i, keyspec)
-                               for i in value]
-                value_of_type = [conforms_to_typerule(i, valuespec)
-                                 for i in value.values()]
+                valtype = types_str2object(typerule)
 
-                is_of_type = (is_of_type and all(key_of_type) and
-                              all(value_of_type))
+                if valtype is None:
+                    output.append(value is None)
+                else:
+                    output.append(isinstance(value, valtype))
 
-        return is_of_type
+        return all(output)
+
+    return conformance(value=value, typerule=typerule)
+
+
+def _seq_or_split(typerule):
+
+    output = list()
 
     try:
-        output = check_if_value_conforms(value=value, typerule=typerule)
-    except (KeyError, TypeError, AttributeError):
-        output = False
+        or_split = typerule.index(']|')
+    except ValueError:
+        return [typerule]
+
+    left_rule = typerule[:or_split]
+    right_rule = typerule[(or_split + 2):]
+
+    # Fix left rule
+    if left_rule.count('[') != left_rule.count(']'):
+        nleft = left_rule.count("[") - left_rule.count("]")
+        nleft = "".join(["]" for _ in range(nleft)])
+        left_rule += nleft
+
+    output.append(left_rule)
+
+    # fix right rule
+    if right_rule.count('[') < right_rule.count(']'):
+        # missing a sequence, or some type at left rule
+        missing_left = right_rule.count(']') - right_rule.count('[')
+
+        for i in range(missing_left):
+            sub_left_rule = left_rule[:left_rule.index('[')]
+            right_rule = sub_left_rule + "[" + right_rule
+
+            # Fix left rule for looping
+            index_from = left_rule.index('[') + 1
+            index_to = left_rule.rindex(']')
+            left_rule = left_rule[index_from:index_to]
+
+            right_rule = _seq_or_split(right_rule)
+            output.extend(right_rule)
+
+    else:
+        output.append(right_rule)
 
     return output
 
 
-def typeconverts(typespec):
-    typers = {
-        "str": str,
-        "float": float,
-        "int": int,
+def types_str2object(typerule):
+
+    typerules = {
+        'int': int,
+        'str': str,
         'bool': bool,
-        "datetime_second": functools.partial(progutils.isostr2dt, hastime=True,
-                                             hasmicro=False),
-        "datetime_microsecond": functools.partial(progutils.isostr2dt,
-                                                  hastime=True,
-                                                  hasmicro=True),
-        "date": functools.partial(progutils.isostr2dt, hastime=False,
-                                  hasmicro=False),
-        "tuple": tuple,
-        "list": list,
-        "set": set,
+        'float': float,
+        'set': set,
+        'list': list,
+        'tuple': tuple,
         'dict': dict,
-        'None': lambda x: type(None)
+        'ndarray': numpy.ndarray,
+        'date': datetime.date,
+        'datetime': datetime.datetime,
+        'datetime_second': datetime.datetime,
+        'datetime_microsecond': datetime.datetime,
+        'time': datetime.time,
+        'none': None,
+        'null': None,
+        'function': typing.Callable,
+        'callable': typing.Callable
     }
 
-    return typers[typespec]
+    try:
+        output = typerules[typerule]
+    except KeyError:
+        raise ValueError('Invalid typerule specification')
+
+    return output
+
+
+def types_converters(typerule):
+
+    typerules = {
+        'int': int,
+        'str': str,
+        'bool': bool,
+        'float': float,
+        'set': set,
+        'list': list,
+        'tuple': tuple,
+        'dict': dict,
+        'ndarray': numpy.array,
+        'date': _D_CONV,
+        'datetime': _DT_CONV,
+        'datetime_second': _DTS_CONV,
+        'datetime_microsecond': _DTMS_CONV,
+        'time': datetime.time,
+        'none': returner,
+        'null': returner
+    }
+
+    try:
+        output = typerules[typerule]
+    except KeyError:
+        raise ValueError('Invalid typerule specification')
+
+    return output
 
 
 # Type check decorators
