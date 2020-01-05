@@ -409,6 +409,24 @@ class TestTableMonolithicClass:
     def test_has_correct_keys(self, tbl):
         assert tbl.keys == ('x1',)
 
+    def test_handling_of_datetime_obj(self, tmp_path):
+        filebase.init_database(tmp_path, 'database')
+        dbpath = os.path.join(tmp_path, 'database')
+
+        db = filebase.DatabaseManager(dbpath=dbpath)
+
+        tbl = db.create_table(
+            name='table1', columns=('x1', 'x2', 'x3'),
+            datatypes=('int', 'date', 'str'), keys=('x1',),
+            storage_type='monolithic')
+
+        data = (5, datetime.date(2019, 1, 1), 'hey')
+
+        try:
+            tbl.add(data)
+        except TypeError:
+            pytest.fail("date object not handled correctly")
+
     def test_has_correct_enforce_integrity(self, tbl):
         assert tbl.enforce_integrity is True
 
@@ -833,6 +851,42 @@ class TestTableSplicedClass:
         tbl.add(dat)
 
         assert tbl.meta['nrecords'] == (len(data) + 1)
+
+    def test_storing_of_datetime_obj(self, tmp_path):
+        filebase.init_database(tmp_path, 'database')
+        dbpath = os.path.join(tmp_path, 'database')
+
+        db = filebase.DatabaseManager(dbpath=dbpath)
+
+        tbl = db.create_table(
+            name='table1', columns=('x1', 'x2', 'x3', 'x4'),
+            datatypes=('int', 'datetime', 'str', 'int'), keys=('x1', 'x2'),
+            storage_type='spliced', splice_keys=('x1',))
+
+        data = [(5, datetime.datetime(2019, 1, 1, 10, 10, 10), 'hey', 10)]
+
+        try:
+            tbl.add(data)
+        except TypeError:
+            pytest.fail("date object not handled correctly")
+
+    def test_load_of_datetime_datatypes(self, tmp_path):
+        filebase.init_database(tmp_path, 'database')
+        dbpath = os.path.join(tmp_path, 'database')
+
+        db = filebase.DatabaseManager(dbpath=dbpath)
+
+        tbl = db.create_table(
+            name='table1', columns=('x1', 'x2', 'x3', 'x4'),
+            datatypes=('int', 'datetime', 'str', 'int'), keys=('x1', 'x2'),
+            storage_type='spliced', splice_keys=('x1',))
+
+        data = [(5, datetime.datetime(2019, 1, 1, 10, 10, 10), 'hey', 10)]
+
+        tbl.add(data)
+
+        # Reload database
+        db = filebase.DatabaseManager(dbpath=dbpath)
 
 
 class TestRetriever:

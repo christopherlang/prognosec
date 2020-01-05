@@ -267,31 +267,32 @@ def _seq_or_split(typerule):
     return output
 
 
+TYPERULES = {
+    'int': int,
+    'str': str,
+    'bool': bool,
+    'float': float,
+    'set': set,
+    'list': list,
+    'tuple': tuple,
+    'dict': dict,
+    'ndarray': numpy.ndarray,
+    'date': datetime.date,
+    'datetime': datetime.datetime,
+    'datetime_second': datetime.datetime,
+    'datetime_microsecond': datetime.datetime,
+    'time': datetime.time,
+    'none': None,
+    'null': None,
+    'function': typing.Callable,
+    'callable': typing.Callable
+}
+
+
 def types_str2object(typerule):
 
-    typerules = {
-        'int': int,
-        'str': str,
-        'bool': bool,
-        'float': float,
-        'set': set,
-        'list': list,
-        'tuple': tuple,
-        'dict': dict,
-        'ndarray': numpy.ndarray,
-        'date': datetime.date,
-        'datetime': datetime.datetime,
-        'datetime_second': datetime.datetime,
-        'datetime_microsecond': datetime.datetime,
-        'time': datetime.time,
-        'none': None,
-        'null': None,
-        'function': typing.Callable,
-        'callable': typing.Callable
-    }
-
     try:
-        output = typerules[typerule]
+        output = TYPERULES[typerule]
     except KeyError:
         raise ValueError('Invalid typerule specification')
 

@@ -1,12 +1,12 @@
 import json
 import os
 import shutil
+import itertools
 import abc
 import pickle
-import itertools
 import queue
 import threading
-from typing import Sequence, Tuple, List, Dict, Union, Callable
+from typing import Sequence, Tuple, List, Dict, Union, Callable, Type
 import numpy
 from progutils import progutils
 from progutils import typechecks
@@ -15,20 +15,26 @@ from filebase import _meta as meta
 
 class DatabaseManager:
 
-    def __init__(self, dbpath):
+    def __init__(self, dbpath: str):
         self._metatemplate = meta.MetaDatabaseTemplate()
         self._meta = self._load_dbmeta(dbpath=dbpath)
 
     @property
     def meta(self):
+        """Get the Database Meta instance"""
+
         return self._meta
 
     @property
     def template(self):
+        """Get the Database Meta Template"""
+
         return self._metatemplate
 
     @property
-    def tables(self):
+    def tables(self) -> Tuple[str]:
+        """Names of the tables that the database manages"""
+
         stores_directory = self.meta['database_data_root_directory']
         table_directories = os.listdir(stores_directory)
         table_directories = [i.replace('table__', '')
@@ -36,7 +42,9 @@ class DatabaseManager:
 
         return tuple(table_directories)
 
-    def _load_dbmeta(self, dbpath):
+    def _load_dbmeta(self, dbpath: str):
+        """Create a Database meta.Meta instance by loading from file"""
+
         metafileloc = os.path.join(dbpath, 'database_meta.json')
         with open(metafileloc, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
@@ -49,7 +57,9 @@ class DatabaseManager:
 
         return meta.Meta(template=self.template, metadata=metadata)
 
-    def _load_tblmeta(self, tblname):
+    def _load_tblmeta(self, tblname: str):
+        """Create a Table meta.Meta instance by loading from file"""
+
         tbl_dir = self.meta['database_data_root_directory']
         tablepath = os.path.join(tbl_dir, 'table__' + tblname)
         metapath = os.path.join(tablepath, 'metadata.json')
@@ -70,7 +80,8 @@ class DatabaseManager:
                 metadata[key] = dict()
 
             elif key == 'splice_keys':
-                metadata[key] = tuple(metadata[key])
+                if metadata[key] is not None:  # For Monolithic
+                    metadata[key] = tuple(metadata[key])
 
         return meta.Meta(template=tbl_meta_template, metadata=metadata)
 
@@ -78,6 +89,32 @@ class DatabaseManager:
             self, name: str, columns: Tuple[str], datatypes: Tuple[str],
             keys: Tuple[str], foreign: Tuple[str] = None,
             storage_type: str = 'monolithic', splice_keys: Tuple[str] = None):
+        """Create a table
+
+        Parameters
+        ----------
+        name : str
+            Name of the table. Should only be alphanumeric and underscore
+        columns : tuple[str]
+            The column names for the table
+        datatypes : tuple[str]
+            The data types of the table. Should be of same length as `columns`
+        keys : tuple[str]
+            Column names used to uniquely identify a row
+        foreign : tuple[str]
+            Column names used to link to another table. Not really used ATM
+        storage_type : {'monolithic', 'spliced'}
+            The method of storage. Monolithic means all records are stored
+            in one JSON file and loaded as such into memory. Spliced splits
+            the data, one for each set of `slice_keys`
+        splice_keys : tuple[str], Optional
+            Column names used to split the dataset. Only used if `storage_type`
+            is 'spliced'
+
+        Returns
+        -------
+        TableMonolithic, TableSpliced
+        """
 
         if name in self.meta['tables']:
             raise ValueError(f"Table '{name}' already exists")
@@ -146,6 +183,17 @@ class DatabaseManager:
         return tblinstance
 
     def get_table(self, tblname):
+        """Retrieve a table instance
+
+        Parameters
+        ----------
+        tblname : str
+            Name of the table
+
+        Returns
+        -------
+        TableMonolithic, TableSpliced
+        """
         if tblname not in self.tables:
             raise ValueError(f"Table '{tblname}' does not exist")
 
@@ -161,6 +209,13 @@ class DatabaseManager:
         return tblinstance
 
     def delete_table(self, tblname):
+        """Delete a table and all of its data
+
+        Parameters
+        ----------
+        tblname : str
+            Name of the table
+        """
         if tblname not in self.tables:
             raise ValueError(f"Table '{tblname}' does not exist")
 
@@ -180,7 +235,20 @@ class DatabaseManager:
         self.meta.edit('total_table_records', total_recs)
 
 
-def retriever(indices):
+def retriever(indices: Union[int, Tuple[int], List[int]]):
+    """Get items in a sequence
+
+    Similar to `operator.itemgetter`, but always returns the same type as
+    the input. Supports `tuple`, `list`, and `ndarray`
+
+    Parameters
+    ----------
+    indices : int, tuple[int], list[int]
+
+    Returns
+    -------
+    tuple, list, ndarray
+    """
     if isinstance(indices, int):
         indices = (indices,)
     elif typechecks.conforms_typerule(indices, 'tuple[int]'):
@@ -207,6 +275,9 @@ def retriever(indices):
 
 
 class TableAbstract(abc.ABC):
+
+    datetime_datatypes = ('date', 'datetime', 'datetime_second',
+                          'datetime_microsecond', 'time')
 
     def __init__(self, table_meta: meta.Meta, database_meta: meta.Meta):
         self._meta = table_meta
@@ -288,6 +359,66 @@ class TableAbstract(abc.ABC):
     def _save_records(self):
         pass
 
+    def _convert_datetime(self, records=None, to='json'):
+        dt_dtypes = TableAbstract.datetime_datatypes
+
+        indexed_dtypes = enumerate(self.datatypes)
+
+        col_index = [(i, dtype) for i, dtype in indexed_dtypes
+                     if dtype in dt_dtypes]
+
+        output = list()
+
+        if records is None:
+            records = self.records
+
+        for rec in records:
+            for col_i, dtype in col_index:
+
+                rec = list(rec)
+
+                if to == 'json':
+
+                    if rec[col_i] is not None:
+                        if dtype == 'date':
+                            rec[col_i] = progutils.convert_date_to_iso(
+                                rec[col_i])
+                        elif dtype == 'datetime' or dtype == 'datetime_second':
+                            rec[col_i] = progutils.convert_datetime_to_iso(
+                                rec[col_i], with_ms=False)
+                        elif dtype == 'datetime_microsecond':
+                            rec[col_i] = progutils.convert_datetime_to_iso(
+                                rec[col_i], with_ms=True)
+                        elif dtype == 'time':
+                            rec[col_i] = progutils.convert_time_to_iso(
+                                rec[col_i], with_ms=False)
+                    else:
+                        rec[col_i] = None
+
+                elif to == 'internal':
+
+                    if rec[col_i] is not None:
+
+                        if dtype == 'date':
+                            rec[col_i] = progutils.convert_iso_to_date(
+                                rec[col_i])
+                        elif dtype == 'datetime' or dtype == 'datetime_second':
+                            rec[col_i] = progutils.convert_iso_to_datetime(
+                                rec[col_i], with_ms=False)
+                        elif dtype == 'datetime_microsecond':
+                            rec[col_i] = progutils.convert_iso_to_datetime(
+                                rec[col_i], with_ms=True)
+                        elif dtype == 'time':
+                            rec[col_i] = progutils.convert_iso_to_time(
+                                rec[col_i], with_ms=False)
+
+                    else:
+                        rec[col_i] = None
+
+            output.append(tuple(rec))
+
+        return output
+
     @abc.abstractmethod
     def _save_index(self):
         pass
@@ -317,12 +448,28 @@ class TableAbstract(abc.ABC):
         pass
 
     def _new_records_checks(self, records: List[Tuple]):
-        # typerule = 'list[tuple[str|int|float|bool]]'
-        # if typechecks.conforms_typerule(records, typerule) is False:
-        #     raise TypeError("'records' should be list of tuples")
+        # For performance, we only check a total of 10% of records from
+        # top and bottom (head, tail)
+        sample_size = 0.10 * len(records)
+        if sample_size < 50:
+            record_check_indices = range(len(records))
+        else:
+            sample_size = int(sample_size)  # just truncate decimal part
+
+            if sample_size % 2 != 0:
+                sample_size -= 1
+
+            sample_size = sample_size // 2
+
+            tail_start_index = len(records) - sample_size
+            head_indices = range(sample_size)
+            tail_indices = range(tail_start_index, len(records))
+            record_check_indices = itertools.chain(head_indices, tail_indices)
+
+        # sub_records = list()
 
         # Type check each record, each element
-        for records_i in range(len(records)):
+        for records_i in record_check_indices:
             a_record = records[records_i]
 
             if len(a_record) != len(self.columns):
@@ -384,6 +531,11 @@ class TableMonolithic(TableAbstract):
 
             with open(filepath, 'r', encoding='utf-8') as f:
                 output = [tuple(i) for i in json.load(f)]
+
+                all_dtypes = ' '.join(self.datatypes).lower()
+                if 'date' in all_dtypes or 'time' in all_dtypes:
+                    output = self._convert_datetime(records=output,
+                                                    to='internal')
         else:
             output = list()
 
@@ -401,9 +553,19 @@ class TableMonolithic(TableAbstract):
         return output
 
     def _save_records(self):
+
         if self.records:
+            all_dtypes = ' '.join(self.datatypes).lower()
+
+            if 'date' in all_dtypes or 'time' in all_dtypes:
+                output_recs = self._convert_datetime(to='json')
+            else:
+                output_recs = self.records
+
+            # breakpoint()
+
             with open(self._get_filepath(), 'w', encoding='utf-8') as f:
-                json.dump(self.records, f, indent=None)
+                json.dump(output_recs, f, indent=None)
 
     def _save_index(self):
         indexfile_loc = self.meta['index_file_location']
@@ -511,7 +673,7 @@ class TableSpliced(TableAbstract):
         return filepath
 
     def _load_records(self, splice_values: Tuple = None) -> List[Tuple]:
-        # breakpoint()
+
         if splice_values is None:
             output = list()
         else:
@@ -521,6 +683,12 @@ class TableSpliced(TableAbstract):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     loaded_recs = json.load(f)
                     output = [tuple(i) for i in loaded_recs]
+
+                    all_dtypes = ' '.join(self.datatypes).lower()
+                    if 'date' in all_dtypes or 'time' in all_dtypes:
+                        output = self._convert_datetime(records=output,
+                                                        to='internal')
+
             else:
                 output = list()
 
@@ -558,6 +726,7 @@ class TableSpliced(TableAbstract):
         if len(records) == 0:
             raise ValueError("Internal records is empty")
 
+        all_dtypes = ' '.join(self.datatypes).lower()
         for splice_values, spliced_records in self._splice_grouper(records):
             spliced_records = [i for i in spliced_records]
             filepath = self._get_filepath(splice_values)
@@ -565,8 +734,15 @@ class TableSpliced(TableAbstract):
             existing_recs = self._load_records(filepath)
             existing_recs.extend(spliced_records)
 
-            self._thread_pool.add_package(
-                record_writer, records=existing_recs, filepath=filepath)
+            if 'date' in all_dtypes or 'time' in all_dtypes:
+                output_recs = self._convert_datetime(records=spliced_records,
+                                                     to='json')
+            else:
+                output_recs = existing_recs
+
+            # self._thread_pool.add_package(
+            #     record_writer, records=output_recs, filepath=filepath)
+            record_writer(output_recs, filepath)
 
     def _save_index(self):
         indexfile_loc = self.meta['index_file_location']
@@ -585,6 +761,9 @@ class TableSpliced(TableAbstract):
 
     def add(self, records: Union[List[Tuple], Tuple],
             integrity_method: bool = 'raise'):
+        if isinstance(records, tuple):
+            records = [records]
+
         self._new_records_checks(records)
 
         self._records = list()

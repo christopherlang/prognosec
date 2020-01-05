@@ -328,6 +328,62 @@ def isostr2dt(isostring, hastime=True, hasmicro=True):
     return output
 
 
+def convert_iso_to_datetime(isostring, with_ms=False):
+    if with_ms is True:
+        output = datetime.datetime(
+            int(isostring[:4]), int(isostring[5:7]), int(isostring[8:10]),
+            int(isostring[11:13]), int(isostring[14:16]),
+            int(isostring[17:19]), int(isostring[20:]))
+    else:
+        output = datetime.datetime(
+            int(isostring[:4]), int(isostring[5:7]), int(isostring[8:10]),
+            int(isostring[11:13]), int(isostring[14:16]),
+            int(isostring[17:19]))
+
+    return output
+
+
+def convert_iso_to_date(isostring):
+
+    output = datetime.date(
+        int(isostring[:4]), int(isostring[5:7]), int(isostring[8:10]))
+
+    return output
+
+
+def convert_iso_to_time(isostring, with_ms=False):
+    if with_ms is True:
+        output = datetime.time(
+            int(isostring[:2]), int(isostring[3:5]), int(isostring[6:8]),
+            int(isostring[9:]))
+    else:
+        output = datetime.time(
+            int(isostring[:2]), int(isostring[3:5]), int(isostring[6:8]))
+
+    return output
+
+
+def convert_datetime_to_iso(dt_obj, with_ms=False):
+    if (with_ms is not True) and (dt_obj.microsecond != 0):
+        dt_obj = dt_obj.replace(microsecond=0)
+
+    return dt_obj.isoformat()
+
+
+def convert_date_to_iso(dt_obj):
+    try:
+        dt_obj = dt_obj.date()
+    except AttributeError:
+        # Assuming date instance instead
+        pass
+
+    return dt_obj.isoformat()
+
+
+def convert_time_to_iso(dt_obj, with_ms=False):
+    return convert_datetime_to_iso(dt_obj, with_ms=with_ms)
+
+
 def utcnow_iso():
     output = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
     output += 'Z'
