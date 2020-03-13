@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import itertools
+import copy
 import abc
 import pickle
 import queue
@@ -99,7 +100,7 @@ class DatabaseManager:
             The column names for the table
         datatypes : tuple[str]
             The data types of the table. Should be of same length as `columns`
-        keys : tuple[str]
+        keys : tuple[str], None
             Column names used to uniquely identify a row
         foreign : tuple[str]
             Column names used to link to another table. Not really used ATM
@@ -119,8 +120,8 @@ class DatabaseManager:
         if name in self.meta['tables']:
             raise ValueError(f"Table '{name}' already exists")
 
-        if storage_type not in ['monolithic', 'rolling', 'spliced']:
-            vals = ['monolithic', 'rolling', 'spliced']
+        if storage_type not in ['monolithic', 'spliced']:
+            vals = ['monolithic', 'spliced']
             raise ValueError(f"Only {vals} are valid 'storage_type'")
 
         storesdir = self.meta['database_data_root_directory']
@@ -147,7 +148,7 @@ class DatabaseManager:
         tblmeta.edit(
             'meta_file_location', os.path.join(tbldir, 'metadata.json'))
         tblmeta.edit('storage_type', storage_type)
-        # tblmeta.edit('splice_key', splice_key)
+        tblmeta.edit('splice_keys', splice_keys)
 
         # TODO
         # This is a bypass due to the conform_typerule issues when setting
@@ -159,8 +160,8 @@ class DatabaseManager:
         tblmeta._metadata['foreign'] = foreign
         tblmeta._keys_edited['foreign'] = True
 
-        tblmeta._metadata['splice_keys'] = splice_keys
-        tblmeta._keys_edited['splice_keys'] = True
+        # tblmeta._metadata['splice_keys'] = splice_keys
+        # tblmeta._keys_edited['splice_keys'] = True
 
         tblmeta.write(tblmeta.metadata['meta_file_location'])
 
@@ -216,6 +217,7 @@ class DatabaseManager:
         tblname : str
             Name of the table
         """
+
         if tblname not in self.tables:
             raise ValueError(f"Table '{tblname}' does not exist")
 
@@ -227,12 +229,17 @@ class DatabaseManager:
 
         tblnames = self.meta['tables']
         tblnames = tuple(i for i in tblnames if i != tblname)
+        self.meta.metadata['tables'] = tuple()
         self.meta.edit('tables', tblnames)
+
+        del self.meta['table_meta_locations'][tblname]
 
         self.meta.edit('last_modified', progutils.utcnow())
 
         total_recs = self.meta['total_table_records'] - tbl_nrecords
         self.meta.edit('total_table_records', total_recs)
+
+        self.meta.write(self.meta['database_meta_location'])
 
 
 def retriever(indices: Union[int, Tuple[int], List[int]]):
@@ -588,7 +595,6 @@ class TableMonolithic(TableAbstract):
         if self.meta['enforce_integrity'] is True:
 
             for rec in records:
-
                 if (self._keys_getter(rec) in self.index.keys()) is True:
                     if integrity_method == 'raise':
                         msg = f"index '{self._keys_getter(rec)}' "
@@ -629,6 +635,28 @@ class TableMonolithic(TableAbstract):
 
     def retrieve(self):
         return self.records
+
+    def replace(self, new_records):
+
+        old_length = len(self.records)
+        self._index = dict()
+        self._records = list()
+        self.add(new_records, integrity_method='raise')
+
+        self.meta.edit('nrecords', len(self.records))
+        self.meta.edit('last_modified', progutils.utcnow())
+        self.meta.write(self.meta['meta_file_location'])
+
+        nnew_db_records = self.meta_database['total_table_records']
+        nnew_db_records -= old_length
+        nnew_db_records += len(new_records)
+        self.meta_database.edit('total_table_records', nnew_db_records)
+        self.meta_database.edit('last_modified', progutils.utcnow())
+        dbmeta_loc = self.meta_database['database_meta_location']
+        self.meta_database.write(dbmeta_loc)
+
+        self._save_records()
+        self._save_index()
 
 
 class TableSpliced(TableAbstract):

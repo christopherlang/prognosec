@@ -1,0 +1,15 @@
+general:
+  max_retries_intrinio: 20
+  force_run: False
+
+database:
+  root_directory: /home/chlang/Projects/prognosec/data
+  database_directory: /home/chlang/Projects/prognosec/data/database
+
+intrinio:
+  api_key: OmRhYzhkZDc0ZTkyMTlhNmI1NmY0ZTEyYjNkODEwYjQ1
+  sandbox_key: OmRhZDIzNTAwZTU3ODI5MDdhOWY2ZjFjN2IyMmQ0NWEy
+
+S3:
+  aws_access_key_id: AKIAU2WSHAXZR6LZLQMQ
+  aws_secret_access_key: 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

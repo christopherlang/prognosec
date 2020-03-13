@@ -1,0 +1,55 @@
+exchanges:
+  table_name: exchanges
+  columns:
+    - id
+    - mic
+    - acronym
+    - name
+    - country
+    - country_code
+    - city
+    - website
+    - first_stock_price_date
+    - last_stock_price_date
+  datatypes:
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - date
+    - date
+  keys:
+    - id
+  storage_type: monolithic
+
+securities:
+  table_name: securities
+  columns:
+    - id
+    - company_id
+    - name
+    - code
+    - currency
+    - ticker
+    - composite_ticker
+    - figi
+    - composite_figi
+    - share_class_figi
+  datatypes:
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+    - str
+  keys:
+    - id
+  storage_type: monolithic
